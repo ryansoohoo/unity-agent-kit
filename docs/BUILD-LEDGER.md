@@ -108,3 +108,5 @@ Task 8 PROOF RUN (2026-08-12, controller-led):
 - The spec's acceptance bar ("100-iteration edit-compile-verify loop, zero false successes, zero stale-epoch reads") is MET, measured. Contrast: the ecosystem's stateful bridges cope with this window via reconnect loops and up-to-20s blind waits; the file signal rode through it at a 2.27s median with state visible the whole way.
 - Harness killed its own editor (verified: no Unity.exe after exit; orphans check clean).
 Paper-test docs commit 25c9144 (installation pass) rode along before the final review.
+FINAL WHOLE-BRANCH REVIEW (most capable model): With fixes — three docs-drift Importants (check count, foreign-trigger epoch-bump honesty, compile-error cliff teaching) + two minors (ASCII evidence across the C# pipe, --epoch verdict shadowing). Fix wave f70a33e; scoped re-review: ALL ADDRESSED, parity byte-verified. All deferrals BLESSED. Suite 102/102 twice.
+v2 COMPLETE. Tag v0.3.0. 12 checks, the epoch signal proven 100/100 on a live editor, skills teach the honest contract.
