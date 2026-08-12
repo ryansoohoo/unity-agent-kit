@@ -1,0 +1,8 @@
+{
+  "name": "unity-agent-kit-monorepo",
+  "private": true,
+  "type": "module",
+  "workspaces": ["packages/*"],
+  "scripts": { "test": "node --test packages/core/test/*.test.js packages/cli/test/*.test.js" },
+  "engines": { "node": ">=20" }
+}

@@ -1,0 +1,4 @@
+Ideas adapted (no code copied): per-request in-editor HTTP pattern (swax/UnityMCP-VRC,
+CC BY-NC — architecture only); heartbeat/instance-file readiness (youngwoocho02/unity-cli, MIT);
+failure-audit and skill-splitting practice (Theo Browne, t3.gg videos, 2026).
+Merge driver and regression suite are original work, first landed in the Kintarō repo.
