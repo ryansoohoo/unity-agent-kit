@@ -8,8 +8,22 @@ description: Use when doing common Unity agent operations (compile-wait, console
 ## 1. Compile wait
 BAD:  edit Foo.cs → `sleep 5` → assume compiled. (Unfocused editors never
       auto-import; measured 90+ s of nothing. Sleeps waste ~12 s per loop.)
-GOOD: edit Foo.cs → `unity command recompile` → poll `recompile_status` until
-      completed/up_to_date → proceed.
+GOOD — poll the epoch signal (bounded, state-aware; works unfocused/headless):
+    node <kit>/packages/cli/bin/kit.js . --epoch
+Loop on it (250 ms) until `fresh && state == "ready"` and, after an edit you
+expect to recompile, until `epoch` has increased past the value you saw
+before the edit — do not settle for `state == "ready"` alone: a poll that
+starts right after triggering a refresh can land inside the editor's 0.5 s
+scan cadence and read the old snapshot before the request was noticed.
+After an asset-only refresh, watch `worldRevision` increase past its
+pre-edit value instead — it bumps every import batch, C# or not, while
+`epoch` only bumps on a domain reload. If the file is absent: the editor
+isn't running the kit's UPM package — fall back to `recompile_status`
+polling via the Unity CLI, never to a timed sleep. To force an import with
+the editor unfocused or headless, write `Temp/unity-agent-kit/refresh.request`
+(any content) and poll again. Hard deadline always (120 s default) — on
+timeout, say so and stop; a hung wait reported honestly beats a sleep that
+lies.
 
 ## 2. Console read
 BAD:  dump the entire console (20k tokens of duplicate warnings).

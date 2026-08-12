@@ -26,8 +26,11 @@ scene/asset mutation follows. Protocol:
    auto-imports — measured 90+ seconds of nothing. Never write-and-wait.
 2. DISCARD the trigger call's response. The reload kills the connection carrying
    it; a killed request can return a well-formed EMPTY 200 (silent false success).
-3. Poll `recompile_status` (idle/triggered/compiling/completed/up_to_date) —
-   designed to stay readable while the main thread is blocked.
+3. Wait on the epoch signal, never on a clock: `kit --epoch` (or read
+   `Temp/unity-agent-kit/epoch.json`) until `state == "ready"` and the epoch
+   has bumped past its pre-edit value. The file stays readable through the
+   reload window where every port is dead. Absent signal → fall back to
+   `recompile_status` polling; NEVER a bare sleep.
 4. Retry on wall-clock budget, never on error codes: dead local ports TIME OUT
    on Windows (SYN dropped), they do not refuse.
 
