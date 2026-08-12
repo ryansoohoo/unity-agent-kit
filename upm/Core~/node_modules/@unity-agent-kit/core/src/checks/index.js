@@ -9,3 +9,4 @@ import './unity-mcp.js';
 import './audit.js';
 import './skill-lint.js';
 import './orphans.js';
+import './kanabo.js';
