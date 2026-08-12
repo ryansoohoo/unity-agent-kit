@@ -12,6 +12,8 @@ const PORT_RE = /(?:localhost|127\.0\.0\.1):(\d{2,5})/;
 // Command-shaped mirrors of the blast-radius DENY_RULES (those are permission
 // patterns like "Bash(git clean:*)", not regexes — keep the two lists in sync).
 const DESTRUCTIVE_RES = [/\bgit\s+clean\b/i, /\bgit\s+reset\s+--hard\b/i, /\brm\s+-(?:rf?|fr)\b/i, /\brmdir\s+\/s\b/i, /Remove-Item\b[^\n]*-Recurse/i];
+const REFRESH_RE = /\bunity\s+\w|dotnet\s+build|msbuild|AssetDatabase\.Refresh|-batchmode|runTests|\bcompile\b/i;
+const MEASURE_RE = /\b(test|build|unity|profil|bench|dotnet)\b/i;
 const DUMP_LIMIT = 50_000;
 
 // Each signature scans ONE session and returns [{ line, message }].
@@ -74,13 +76,64 @@ export const SIGNATURES = [
         .map(r => ({ line: r.line, message: `tool result of ${Math.round(r.text.length / 1000)}k chars dumped into context` }));
     },
   },
+  {
+    id: 'write-without-refresh', taxonomy: 'NO-VERIFY', confidence: 0.4,
+    preventedBy: 'unity-verify skill (tier 1 compile check after C# edits)',
+    scan(s) {
+      const uses = toolUses(s);
+      const cs = uses.filter(t => /\.cs$/i.test(editedFile(t) ?? ''));
+      if (cs.length < 3) return [];
+      const refreshed = uses.some(t => isBash(t) && REFRESH_RE.test(cmd(t)));
+      return refreshed ? [] : [{ line: cs[0].line, message: `${cs.length} C# file edits with no compile/refresh anywhere in the session` }];
+    },
+  },
+  {
+    id: 'accepted-empty-response', taxonomy: 'NO-VERIFY', confidence: 0.4,
+    preventedBy: 'unity-verify skill (empty/ambiguous = unknown, re-check)',
+    scan(s) {
+      const empties = toolResults(s).filter(r => r.text.trim() === '');
+      return empties.length >= 3 ? [{ line: empties[2].line, message: `${empties.length} empty tool results accepted without a re-check` }] : [];
+    },
+  },
+  {
+    id: 'huge-diff-no-measurement', taxonomy: 'NO-VERIFY', confidence: 0.5,
+    preventedBy: 'unity-verify skill (tier-0.5 diff self-review + measured verification)',
+    scan(s) {
+      const uses = toolUses(s), out = [];
+      let runStart = -1, runLen = 0;
+      for (let i = 0; i <= uses.length; i++) {
+        const isEdit = i < uses.length && editedFile(uses[i]) !== null;
+        if (isEdit) { if (runLen === 0) runStart = i; runLen++; continue; }
+        if (runLen >= 10) {
+          const next5 = uses.slice(i, i + 5);
+          if (!next5.some(t => isBash(t) && MEASURE_RE.test(cmd(t))))
+            out.push({ line: uses[runStart].line, message: `${runLen} consecutive edits with no test/build/measurement after` });
+        }
+        runLen = 0;
+      }
+      return out;
+    },
+  },
+  {
+    id: 'runaway-subagent-chain', taxonomy: 'PROCESS', confidence: 0.6,
+    preventedBy: 'unity-topology skill (bounded sub-agent dispatch)',
+    scan(s) {
+      const spawns = toolUses(s).filter(t => t.name === 'Task' || t.name === 'Agent');
+      return spawns.length >= 10 ? [{ line: spawns[9].line, message: `${spawns.length} sub-agent dispatches in one session` }] : [];
+    },
+  },
 ];
 
 const CLASS_ORDER = ['fix-now', 'needs-attention', 'safe-to-ignore', 'superseded'];
 
 // One session-independent tally per session file (tokens/retries — Task 7 fills in).
 export function sessionTally(s) {
-  return { file: s.file, tokens: usageTotals(s), toolCalls: toolUses(s).length, retries: 0 };
+  const uses = toolUses(s);
+  let retries = 0;
+  for (let i = 1; i < uses.length; i++) {
+    if (isBash(uses[i]) && isBash(uses[i - 1]) && cmd(uses[i]) && cmd(uses[i]) === cmd(uses[i - 1])) retries++;
+  }
+  return { file: s.file, tokens: usageTotals(s), toolCalls: uses.length, retries };
 }
 
 register({
