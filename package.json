@@ -3,6 +3,6 @@
   "private": true,
   "type": "module",
   "workspaces": ["packages/*"],
-  "scripts": { "test": "node --test --test-concurrency=1 packages/core/test/**/*.test.js" },
+  "scripts": { "test": "node --test --test-concurrency=1 packages/core/test/**/*.test.js packages/cli/test/**/*.test.js" },
   "engines": { "node": ">=20" }
 }
