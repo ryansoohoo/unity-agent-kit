@@ -1,1 +1,1 @@
-{ "name": "@unity-agent-kit/core", "version": "0.2.0", "type": "module", "main": "src/registry.js" }
+{ "name": "@unity-agent-kit/core", "version": "0.3.0", "type": "module", "main": "src/registry.js" }

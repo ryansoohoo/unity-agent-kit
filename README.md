@@ -116,6 +116,33 @@ Proof results persist to `.unity-agent-kit/verify.json` in the target repo:
 if the last real-merge proof FAILED, the doctor shows `warn` even though the
 config string looks right — green means proven, not just configured.
 
+## v2 — Kanabō (minimal): the reload-boundary signal
+
+The domain reload is where agent workflows break: every socket and HTTP port
+dies, autotick disarms, and "wait 10 seconds" becomes the coping strategy.
+v2 ships the smallest thing that fixes it — a signal, not a tool surface:
+
+- The kit's UPM package writes `Temp/unity-agent-kit/epoch.json` from inside
+  the editor: `epoch` (increments on every domain reload), a 0.5 s heartbeat,
+  `state` (`ready` / `compiling` / `reloading`), and an asset `worldRevision`.
+  A file stays readable through the exact window where every connection is
+  dead — that is the whole trick.
+- `node packages/cli/bin/kit.js <proj> --epoch` is the machine door: one JSON
+  object, exit 0 always. Poll it; never sleep.
+- Writing `Temp/unity-agent-kit/refresh.request` asks the editor to import —
+  works unfocused and headless (unfocused editors never auto-import; that is
+  a measured hazard, not folklore).
+- Stale reads become *detectable*: capture `epoch` before an edit, require it
+  to increase after. The `kanabo` doctor row reports the live signal.
+- Scope ceiling: no scene ops, no eval, no serializers — a status file out,
+  one refresh verb in. The vendor CLI/MCP remains the tool surface; this is
+  the correctness residual under it.
+
+Proof: `scripts/kanabo-proof.mjs` runs the acceptance loop — N iterations of
+edit → refresh → reload → verify on a disposable scratch project, requiring
+zero false successes and zero stale-epoch reads. (Result recorded in
+docs/BUILD-LEDGER.md.)
+
 ## What the skills teach
 
 Five skills, installed by the Claude Code plugin:
