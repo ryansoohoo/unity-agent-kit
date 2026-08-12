@@ -23,8 +23,17 @@ export function undoAll(ctx) {
   for (const entry of data.applied.reverse()) {
     for (const op of (entry.undo ?? []).slice().reverse()) {
       if (op.kind === 'git-config-unset') {
-        try { execFileSync('git', ['config', '--unset', op.key], { cwd: ctx.root }); } catch { /* already unset */ }
-        undone.push(`git config --unset ${op.key}`);
+        try {
+          execFileSync('git', ['config', '--unset', op.key], { cwd: ctx.root });
+          undone.push(`git config --unset ${op.key}`);
+        } catch (err) {
+          if (err.status === 5) {
+            // exit code 5 means key does not exist, treat as already unset
+            undone.push(`${op.key} already unset`);
+          } else {
+            throw new Error(`failed to unset git config ${op.key}: ${err.message}`);
+          }
+        }
       } else if (op.kind === 'restore-file') {
         if (op.previous === null) { rmSync(op.path, { force: true }); }
         else { writeFileSync(op.path, op.previous); }
