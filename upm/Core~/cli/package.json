@@ -3,6 +3,6 @@
   "bin": { "unity-agent-kit": "./bin/kit.js" },
   "dependencies": { "@unity-agent-kit/core": "0.4.0" },
   "files": ["bin", "README.md"],
-  "repository": { "type": "git", "url": "git+https://github.com/OWNER/unity-agent-kit.git" },
+  "repository": { "type": "git", "url": "git+https://github.com/ryansoohoo/unity-agent-kit.git" },
   "license": "MIT"
 }

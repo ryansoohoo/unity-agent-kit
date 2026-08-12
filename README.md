@@ -89,9 +89,7 @@ root):
 
 or straight from git:
 
-    "com.unity-agent-kit.doctor": "https://github.com/USER/unity-agent-kit.git?path=/upm"
-
-(The git URL works once the repo is published — until then, use the local `file:` install above.)
+    "com.unity-agent-kit.doctor": "https://github.com/ryansoohoo/unity-agent-kit.git?path=/upm"
 
 Deep bundle paths ride along (`Core~/node_modules/...`) — if your project sits near the MAX_PATH cliff, the kit's own `longpaths`/`path-headroom` checks are the fix.
 
