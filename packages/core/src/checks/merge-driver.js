@@ -3,6 +3,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync, copyFileSync } from
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
+import { loadVerify } from '../audit.js';
 
 const ASSETS = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'assets');
 const toPosix = (p) => p.replace(/\\/g, '/');
@@ -30,6 +31,10 @@ register({
     const drv = ctx.git('config', '--get', 'merge.unityyamlmerge.driver');
     if (!drv.ok || !drv.out) return { status: 'fail', evidence: '.gitattributes routes Unity YAML to unityyamlmerge but merge.unityyamlmerge.driver is UNSET — git is text-merging scenes' };
     if (!/unity-yaml-merge\.sh/.test(drv.out)) return { status: 'warn', evidence: `driver set to something else: ${drv.out}` };
+    const proven = loadVerify(ctx)['merge-driver'];
+    if (proven && proven.ok === false) {
+      return { status: 'warn', evidence: `driver configured (${drv.out}) but its last real-merge proof FAILED at ${proven.at} — run --fix to re-prove` };
+    }
     return { status: 'pass', evidence: drv.out };
   },
   apply: async (ctx) => {

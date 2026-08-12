@@ -4,6 +4,26 @@ import { execFileSync } from 'node:child_process';
 
 const auditPath = (ctx) => join(ctx.root, '.unity-agent-kit', 'applied.json');
 
+const verifyPath = (ctx) => join(ctx.root, '.unity-agent-kit', 'verify.json');
+
+// Last real-proof outcome per check id: { [id]: { ok, at } }. Written by
+// applyOne after verify(); read by detects that must not claim green while
+// the last measured proof failed (e.g. merge-driver on a machine without
+// UnityYAMLMerge.exe).
+export function loadVerify(ctx) {
+  const p = verifyPath(ctx);
+  if (!existsSync(p)) return {};
+  try { return JSON.parse(readFileSync(p, 'utf8')); }
+  catch { return {}; } // unreadable proof log = no proof claims, never a crash
+}
+
+export function recordVerify(ctx, id, result) {
+  const data = loadVerify(ctx);
+  data[id] = { ok: !!result.ok, at: new Date().toISOString() };
+  mkdirSync(dirname(verifyPath(ctx)), { recursive: true });
+  writeFileSync(verifyPath(ctx), JSON.stringify(data, null, 2) + '\n');
+}
+
 export function loadAudit(ctx) {
   const p = auditPath(ctx);
   if (!existsSync(p)) return { applied: [] };

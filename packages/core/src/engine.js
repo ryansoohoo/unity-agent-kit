@@ -1,5 +1,5 @@
 import { checks, getCheck } from './registry.js';
-import { recordApply } from './audit.js';
+import { recordApply, recordVerify } from './audit.js';
 
 export async function doctor(ctx, { only } = {}) {
   const rows = [];
@@ -18,5 +18,6 @@ export async function applyOne(ctx, id) {
   const { changed, undo } = await c.apply(ctx);
   recordApply(ctx, { id, at: new Date().toISOString(), changed, undo });
   const verify = c.verify ? await c.verify(ctx) : null;
+  if (verify) recordVerify(ctx, id, verify);
   return { changed, verify };
 }
