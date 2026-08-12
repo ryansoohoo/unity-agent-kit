@@ -110,6 +110,26 @@ Five skills, installed by the Claude Code plugin:
 - `detect()` never mutates your project — it only reads files and git config.
 - Every `apply()` is undoable via `--undo`.
 
+## Daily sweep (failure audit)
+
+The `audit` check reads your project's local Claude Code transcripts
+(`~/.claude/projects/<project>/*.jsonl` — **local-only, nothing is uploaded**)
+and flags Unity failure signatures: blind sleeps after edits, dead-port retry
+storms, C# writes with no refresh, accepted empty responses, oversized console
+dumps, huge diffs with no measurement, runaway sub-agent chains, and
+destructive-command near-misses. Each finding is ranked
+(fix-now / needs-attention / safe-to-ignore / superseded), scored for
+confidence, linked as `file:line` into the transcript, and mapped to the kit
+rule or skill that prevents it. Per-session tool-call/retry/token tallies ride
+along in `--json` (`detail.sessions`).
+
+Run it as a daily sweep over yesterday's sessions:
+
+    node packages/cli/bin/kit.js <your-project> --only audit
+
+Findings are advisory: the audit never returns `fail`, never blocks CI, and has
+no `--fix` path — it tells you which guard to install, you decide.
+
 ## Evidence
 
 The regression suite ships in this repo (`packages/core/test/merge-driver.test.js` and

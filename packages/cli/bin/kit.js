@@ -56,6 +56,17 @@ if (flag('--json')) {
   for (const r of rows) {
     console.log(`  ${GLYPH[r.status]}  ${r.id.padEnd(16)} ${r.evidence}`);
     if (r.status === 'fail') console.log(`        why: ${getCheck(r.id).explain().split('. ')[0]}.`);
+    const f = r.detail?.findings;
+    if (f?.length) {
+      for (const x of f.slice(0, 20)) {
+        console.log(`        [${x.class}] (${x.confidence.toFixed(1)}) ${x.message}`);
+        console.log(`            ${x.file}:${x.line} — prevented by: ${x.preventedBy}`);
+      }
+      if (f.length > 20) console.log(`        … +${f.length - 20} more (use --json for all)`);
+      const t = r.detail.sessions ?? [];
+      const sum = (k) => t.reduce((n, s) => n + (k(s) ?? 0), 0);
+      console.log(`        sessions: ${t.length} · tool calls: ${sum(s => s.toolCalls)} · retries: ${sum(s => s.retries)} · output tokens: ${sum(s => s.tokens?.output)}`);
+    }
   }
   const fails = rows.filter(r => r.status === 'fail').length;
   console.log(`\n  ${fails === 0 ? 'No failures.' : `${fails} failing — run with --fix to repair (per-step consent).`}`);

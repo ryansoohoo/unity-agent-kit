@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -79,4 +79,21 @@ test('--json rows include a boolean canApply (UPM door contract)', () => {
   for (const r of rows) assert.equal(typeof r.canApply, 'boolean', `${r.id} missing canApply`);
   assert.equal(rows.find(r => r.id === 'merge-driver').canApply, true);
   assert.equal(rows.find(r => r.id === 'editor-churn').canApply, false);
+});
+
+test('human output renders ranked triage findings with clickable file:line', () => {
+  const fx = mkdtempSync(join(tmpdir(), 'uak-fx-'));
+  const entry = { type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'x', name: 'Bash', input: { command: 'git clean -fdx' } }], usage: { input_tokens: 1, output_tokens: 1 } } };
+  writeFileSync(join(fx, 's.jsonl'), JSON.stringify(entry) + '\n');
+  const dir = mkdtempSync(join(tmpdir(), 'uak-'));
+  execFileSync('git', ['init', '-q', dir]);
+  const r = (() => {
+    try { return { code: 0, out: execFileSync(process.execPath, [BIN, dir, '--only', 'audit'], { encoding: 'utf8', env: { ...process.env, UAK_TRANSCRIPTS: fx } }) }; }
+    catch (e) { return { code: e.status, out: `${e.stdout ?? ''}${e.stderr ?? ''}` }; }
+  })();
+  assert.equal(r.code, 0, r.out); // warn never breaks exit codes
+  assert.match(r.out, /\[fix-now\]/);
+  assert.match(r.out, /s\.jsonl:1/);
+  assert.match(r.out, /prevented by: blast-radius/);
+  assert.match(r.out, /sessions: 1 ·/);
 });
