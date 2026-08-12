@@ -1,8 +1,9 @@
 import { execFileSync } from 'node:child_process';
+import { resolve } from 'node:path';
 
 export function createContext(projectRoot) {
   return {
-    root: projectRoot,
+    root: resolve(projectRoot),
     platform: process.platform,
     git(...args) {
       try {
