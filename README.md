@@ -47,8 +47,11 @@ one-line why, and asks `Apply? [y/N/a/q]` before touching anything.
 Other flags (same for both forms above):
 - `--yes` — apply without prompting (for CI; still per-check, just non-interactive)
 - `--only <layer|id>` — scope to one layer (e.g. `hygiene`) or one check id (e.g. `merge-driver`)
-- `--undo` — reverse everything the kit has applied in this project
-- `--json` — machine-readable output
+- `--undo` — reverse everything the kit has applied in this project (files and
+  config are restored exactly; the kit's own `.unity-agent-kit/` audit folder
+  remains as a record)
+- `--json` — machine-readable output: a bare top-level JSON **array** of check
+  rows (`[{id, layer, title, status, evidence, explain, canApply, detail?}, …]`)
 - `--epoch` — print the v2 reload-boundary signal as JSON and exit 0 (see the Kanabō section)
 
 Exit code is `1` if and only if at least one check is failing; `0` otherwise.
@@ -123,7 +126,10 @@ suite that proves the fix, not just a re-check of the same detect logic.
 
 Proof results persist to `.unity-agent-kit/verify.json` in the target repo:
 if the last real-merge proof FAILED, the doctor shows `warn` even though the
-config string looks right — green means proven, not just configured.
+config string looks right — green means proven, not just configured. (And if
+your `.gitattributes` doesn't route Unity YAML to a merge driver at all,
+`merge-driver` reports `na`, not `fail` — nothing routed means nothing to
+prove; add the routing and the check comes alive.)
 
 ## v2 — Kanabō (minimal): the reload-boundary signal
 
