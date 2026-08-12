@@ -90,3 +90,21 @@ Task 15 DOGFOOD (kit ..724065b + metas; Kintarō 6da4b5f):
 FINAL WHOLE-BRANCH REVIEW (most capable model): verdict With fixes — one cross-task seam defect (the failed-proof warn state had no working repair path: detect promised --fix while all three doors offered fail-only rows), package-lock.json missed by the version sync, the queued which() stderr leak, two doc one-liners. Every other ledger deferral was triaged and BLESSED (including the parked stale-lock ruling). FIX WAVE 7ba797a: fix eligibility widened to warn+apply (wizard apply wrapped in try/catch, which guards blast-radius's now-reachable throwing apply; C# gate kept in parity), lockfile at 0.2.0 + test assertions, stderr hygiene on all four vendor probes, docs. Scoped re-review: ALL ADDRESSED (Core~ parity byte-verified), no new Critical/Important breakage.
 v1.1 COMPLETE. Tag v0.2.0. 11 checks, 3 doors (CLI, plugin, UPM window), triage audit validated on real transcripts, dogfood PASSED (door proof + real-data audit; unity-mcp honestly blocked by machine state, with instructions). Suite 86/86 twice.
 Concurrent-session note: skills/unity-claude-md/SKILL.md (+plugin copy) and template/CLAUDE.md carried uncommitted edits from another session throughout this run — deliberately untouched and uncommitted by every dispatch.
+
+# SDD ledger — plan: docs/superpowers/plans/2026-08-12-unity-agent-kit-v2.md (v2 run, 2026-08-12)
+
+Kanabō minimal (epoch signal + reload survival), built under the kill-criteria scope ceiling with the Phase-0 gate explicitly superseded by the user's 2026-08-12 instruction. 8 tasks; suite 86/86 → 102/102.
+
+Task 1: complete (b84ff4e..f5e8df4, clean) — kanabo.js: epochPath/readEpoch/isFresh/requestRefresh + waitReady (bounded poll, never throws, never past deadline; reviewer traced timeout arithmetic + timing tolerances).
+Task 2: complete (..88a50e9, clean) — --epoch machine door (JSON report, exit 0 always).
+Task 3: complete (..f136f51, clean) — kanabo doctor row (integration, pass/na only).
+Task 4: complete (..d080437, 1 fix round; opus reviewer COMPILED the C# against real 6000.5.5f1 assemblies, 0 errors) — KanaboEpoch.cs [InitializeOnLoad]: per-reload epoch (SessionState), 0.5s heartbeat, ready/compiling/reloading state, worldRevision, probe reflection, refresh.request verb. Fix round: import-worker guard (workers run InitializeOnLoad and would stomp the file with BACKWARDS epochs), isCompiling||isUpdating seed+busy, 5s grace latch through Unity's compile-queue gap (Refresh() returns before isCompiling goes true), committed meta w/ unique guid, cached pid, guarded ctor (TypeInitializationException cascade).
+Task 5: complete (..b25a303, 1 fix round) — proof harness. Fix round (reviewer verified empirically): process.exit inside try bypassed the finally that kills the spawned editor → bootFailure restructure; spawn-error guard + existsSync pre-flight.
+Task 6: complete (..7410b2d, clean) — skills teach the real signal (kit --epoch / epoch-bump-after-edit / worldRevision for asset-only refreshes / refresh.request; never a bare sleep); descriptions byte-unchanged.
+Task 7: complete (..7a41ef7, clean) — README Kanabō section + 0.3.0 across all six version sources + lockfile + bundle.
+Task 8 PROOF RUN (2026-08-12, controller-led):
+- Scratch project: blank 6000.5.5f1 -createProject in the session scratchpad (never Kintarō; kill-criteria line honored).
+- Smoke 3/3 clean, then FULL RUN: **100/100 iterations, falseSuccesses 0, staleReads 0, timeouts 0; waitMs min 1774 / median 2272 / max 2306** — headless -batchmode -nographics editor, EditorApplication.update confirmed ticking (heartbeat live), refresh.request verb driving imports unfocused, epoch bumping once per reload, probe const verified live post-reload every iteration.
+- The spec's acceptance bar ("100-iteration edit-compile-verify loop, zero false successes, zero stale-epoch reads") is MET, measured. Contrast: the ecosystem's stateful bridges cope with this window via reconnect loops and up-to-20s blind waits; the file signal rode through it at a 2.27s median with state visible the whole way.
+- Harness killed its own editor (verified: no Unity.exe after exit; orphans check clean).
+Paper-test docs commit 25c9144 (installation pass) rode along before the final review.
