@@ -110,3 +110,21 @@ Task 8 PROOF RUN (2026-08-12, controller-led):
 Paper-test docs commit 25c9144 (installation pass) rode along before the final review.
 FINAL WHOLE-BRANCH REVIEW (most capable model): With fixes — three docs-drift Importants (check count, foreign-trigger epoch-bump honesty, compile-error cliff teaching) + two minors (ASCII evidence across the C# pipe, --epoch verdict shadowing). Fix wave f70a33e; scoped re-review: ALL ADDRESSED, parity byte-verified. All deferrals BLESSED. Suite 102/102 twice.
 v2 COMPLETE. Tag v0.3.0. 12 checks, the epoch signal proven 100/100 on a live editor, skills teach the honest contract.
+
+# Ship train (docs/HANDOFF-SHIP.md run, 2026-08-12)
+
+Same discipline: implementer subagent per task, task review, scoped re-reviews, controller-verified green at every head. Suite 102/102 → 105/105.
+
+SHIPPED — v0.4.0 (tag at 0c87419, one review + one fix round):
+- `--wait-ready` verb (bounded wait as a one-liner for agents) + engine-level detect guard (a throwing detect() degrades to an honest na row) + drive-root quoting in KitDoctor.cs + npm publish metadata.
+- Review caught a defect in the handoff's own verbatim A2 block: bare Number() on --timeout-ms/--poll-ms/--since-epoch turns a typo into a NaN hot-loop, contradicting the "bounded!" contract. Ryan authorized the deviation; num() helper validates all three, exit 2 naming the flag. RED evidence reproduced the hang in the act (child still hot-looping when the 5s exec timeout killed it).
+
+SHIPPED — GitHub: ryansoohoo/unity-agent-kit PUBLIC, main + all four tags pushed, four releases (v0.4.0 = Latest), placeholders patched (6c48d45), README's git-URL UPM install now real.
+
+SHIPPED — CI: .github/workflows/test.yml, windows-latest, Node 20+24 matrix. GREEN: https://github.com/ryansoohoo/unity-agent-kit/actions/runs/31641887644 — both jobs. Two measured Windows-runner surprises, each fixed forward under review:
+1. Node 20's test runner does not glob-expand --test positionals (Node 21+ feature; cmd.exe/pwsh don't expand either) → literal `**` pattern, exit 1. Fix 2f32a55: scripts/run-tests.mjs enumerates the 24 test files explicitly (coverage identity vs the old glob PROVEN by set comparison), keeps --test-concurrency=1. Directory args remain forbidden (measured broken on Node 24/Windows, v1.0 ledger).
+2. GitHub runners have no Unity → UnityYAMLMerge absent → driver honestly exits 1 → all 5 verify cases UU → failed proof recorded → detect warns. Product behavior correct; two tests assumed Unity. Fix 075dcf6: dual-contract tests branch on real tool availability (helper mirrors the driver's search incl. no-fallback-on-bad-override) — with Unity assert the 5/5 pass path, without assert the honest-degradation path (previously pinned by no test). Proven locally in both directions via UNITY_YAML_MERGE / UNITY_HUB_EDITOR_ROOT overrides at nonexistent paths.
+
+NOT SHIPPED — npm (Ryan's call at gate G2, 2026-08-12): machine not npm-authed; publish + npx end-to-end verify + README npm-caveat cleanup deferred to a future session. Prereqs recorded: `npm login`; create the `unity-agent-kit` org on npmjs.com (Ryan chose org over user-scope rename); CLI name `unity-agent-kit` verified free (E404, 2026-08-12). Publish order: core before cli (exact-pin dependency). README's "once published" npx framing intentionally retained — it is still true.
+
+Known minors deferred (triage when convenient): --wait-ready exit 2 undocumented in README flag bullet; num() accepts negative values (bounded either way); OPT_FLAGS is a hand-maintained registry (comment the invariant); core package publishes with no README (empty npm page) and cli README references files outside its tarball (LICENSE/NOTICE/test paths); run-tests.mjs could reuse fstree.listFiles(); engines ">=20" vs readdirSync-recursive's 20.1.0 floor (inert: workflow resolves latest 20.x, roots flat); merge-driver test helper duplicates the driver's discovery in JS (drift → loud red, never silent pass); unity-yaml-merge.sh resolves UnityYAMLMerge before the .meta text-merge branch, so .meta merges fail without Unity though they don't need the tool (product call).
