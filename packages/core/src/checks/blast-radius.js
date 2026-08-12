@@ -32,7 +32,13 @@ register({
   apply: async (ctx) => {
     const p = join(ctx.root, '.claude', 'settings.json');
     const prev = existsSync(p) ? readFileSync(p, 'utf8') : null;
-    const s = prev ? JSON.parse(prev) : {};
+    let s;
+    if (prev) {
+      try { s = JSON.parse(prev); }
+      catch { throw new Error(`blast-radius: ${p} is not valid JSON — fix it by hand, then re-run (refusing to overwrite it).`); }
+    } else {
+      s = {};
+    }
     s.permissions = s.permissions ?? {};
     s.permissions.deny = Array.from(new Set([...(s.permissions.deny ?? []), ...DENY_RULES]));
     mkdirSync(dirname(p), { recursive: true });

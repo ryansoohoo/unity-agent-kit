@@ -112,9 +112,9 @@ Five skills, installed by the Claude Code plugin:
 
 ## Evidence
 
-The regression suites, live-repo verification runs, and design research behind these claims
-currently live in the Kintarō repo's `docs/research/` — they'll migrate into this repo as
-part of a later cleanup pass.
+The regression suite ships in this repo (`packages/core/test/merge-driver.test.js` and
+`packages/core/assets/test-merge-driver.sh`) and runs as part of `npm test`. The design and
+research docs behind these claims live in the Kintarō repo's `docs/research/`.
 
 ## License
 

@@ -49,7 +49,8 @@ if (flag('--fix')) {
 }
 
 if (flag('--json')) {
-  console.log(JSON.stringify(rows, null, 2));
+  const withExplain = rows.map(r => ({ ...r, explain: getCheck(r.id).explain() }));
+  console.log(JSON.stringify(withExplain, null, 2));
 } else {
   console.log(`unity-agent-kit doctor · ${root}\n`);
   for (const r of rows) {

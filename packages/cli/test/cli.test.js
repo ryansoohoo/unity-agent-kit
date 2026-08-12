@@ -23,6 +23,17 @@ test('doctor --json emits parseable rows and exit 1 on failures', () => {
   assert.equal(r.code, rows.some(x => x.status === 'fail') ? 1 : 0);
 });
 
+test('doctor --json rows include a non-empty explain string (superset of human render)', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'uak-'));
+  execFileSync('git', ['init', '-q', dir]);
+  const rows = JSON.parse(run(['--json'], dir).out);
+  assert.ok(rows.length > 0);
+  for (const r of rows) {
+    assert.equal(typeof r.explain, 'string', `${r.id} missing explain`);
+    assert.ok(r.explain.length > 0, `${r.id} explain is empty`);
+  }
+});
+
 test('human output lists every check with a status glyph', () => {
   const dir = mkdtempSync(join(tmpdir(), 'uak-'));
   execFileSync('git', ['init', '-q', dir]);

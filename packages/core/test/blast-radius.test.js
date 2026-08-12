@@ -24,3 +24,12 @@ test('fail without settings; apply merges deny rules preserving existing content
   for (const rule of DENY_RULES) assert.ok(s.permissions.deny.includes(rule), rule);
   assert.equal((await doctor(ctx, { only: 'blast-radius' }))[0].status, 'pass');
 });
+
+test('apply refuses to overwrite an invalid .claude/settings.json — throws instead of clobbering it', async () => {
+  const ctx = createContext(repo());
+  mkdirSync(join(ctx.root, '.claude'), { recursive: true });
+  const p = join(ctx.root, '.claude', 'settings.json');
+  writeFileSync(p, '{ not valid json');
+  await assert.rejects(() => applyOne(ctx, 'blast-radius'), /not valid JSON/);
+  assert.equal(readFileSync(p, 'utf8'), '{ not valid json', 'file must be left untouched');
+});

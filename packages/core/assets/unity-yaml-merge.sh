@@ -23,10 +23,42 @@
 # Configured by tools/setup-merge-driver.sh as:
 #   git config merge.unityyamlmerge.driver "sh '<abs path>' %O %A %B %P"
 #
-# Override the editor after a Unity upgrade:
+# Override the editor after a Unity upgrade, or if auto-discovery below picks
+# the wrong install:
 #   UNITY_YAML_MERGE=/path/to/UnityYAMLMerge.exe
 
 set -u
+
+# Locate UnityYAMLMerge.exe across installed Unity Hub editors, newest first.
+# Multiple Unity 6.x patch releases can be installed side by side (Hub default
+# layout is Editor/<version>/Editor/Data/Tools/UnityYAMLMerge.exe); hardcoding
+# one version silently no-ops the moment a project upgrades. We glob both the
+# MSYS-mount form ("/c/Program Files/...") and the Windows-drive form
+# ("C:/Program Files/...") of the same Hub install root, since this script is
+# invoked by git via different shells that can hand paths either way.
+#
+# Unmatched globs (no Hub install present) expand to the literal pattern
+# string under plain sh, so every candidate is existence-checked before use.
+find_unity_yaml_merge() {
+  hub_root="${UNITY_HUB_EDITOR_ROOT:-}"
+  if [ -n "$hub_root" ]; then
+    set -- "$hub_root"/*/Editor/Data/Tools/UnityYAMLMerge.exe
+  else
+    set -- "/c/Program Files/Unity/Hub/Editor/"*/Editor/Data/Tools/UnityYAMLMerge.exe \
+           "C:/Program Files/Unity/Hub/Editor/"*/Editor/Data/Tools/UnityYAMLMerge.exe
+  fi
+
+  found=""
+  for candidate in "$@"; do
+    [ -f "$candidate" ] && found="${found}${candidate}
+"
+  done
+  [ -n "$found" ] || return 1
+
+  # Version-sort descending (6000.10.x above 6000.5.x above 6000.2.x) so the
+  # newest installed editor wins; take the first match.
+  printf '%s' "$found" | sort -rV | head -n1
+}
 
 if [ "$#" -lt 4 ]; then
   echo "usage: unity-yaml-merge.sh <base %O> <ours %A> <theirs %B> <pathname %P>" >&2
@@ -39,10 +71,13 @@ OURS="$2"   # %A - our version on input; result must end up here
 THEIRS="$3" # %B - their version
 PATHNAME="$4" # %P - real repo path, e.g. Assets/Scenes/Outdoors.unity
 
-UYM="${UNITY_YAML_MERGE:-C:/Program Files/Unity/Hub/Editor/6000.5.5f1/Editor/Data/Tools/UnityYAMLMerge.exe}"
+UYM="${UNITY_YAML_MERGE:-}"
+if [ -z "$UYM" ]; then
+  UYM="$(find_unity_yaml_merge)" || UYM=""
+fi
 
-if [ ! -f "$UYM" ]; then
-  echo "unity-yaml-merge: UnityYAMLMerge not found at: $UYM" >&2
+if [ -z "$UYM" ] || [ ! -f "$UYM" ]; then
+  echo "unity-yaml-merge: UnityYAMLMerge not found (searched installed Unity Hub editors)." >&2
   echo "unity-yaml-merge: set UNITY_YAML_MERGE to override. Leaving '$PATHNAME' conflicted." >&2
   exit 1
 fi

@@ -28,3 +28,17 @@ test('worktree-ignore: appends once, idempotent, pass after apply', async () => 
   assert.equal((gi.match(/\.claude\/worktrees/g) || []).length, 1);
   assert.equal((await doctor(ctx, { only: 'worktree-ignore' }))[0].status, 'pass');
 });
+
+test('worktree-ignore: a non-anchored substring match does not fool apply into skipping the append', async () => {
+  const ctx = createContext(repo());
+  // ".claude/worktrees/foo" contains the substring ".claude/worktrees/" but
+  // does NOT satisfy the anchored line detect() requires, so detect must fail
+  // and apply must still append the proper anchored entry (not skip it
+  // because a naive .includes() check on the raw substring would be fooled).
+  writeFileSync(join(ctx.root, '.gitignore'), '.claude/worktrees/foo\n');
+  assert.equal((await doctor(ctx, { only: 'worktree-ignore' }))[0].status, 'fail');
+  await applyOne(ctx, 'worktree-ignore');
+  const gi = readFileSync(join(ctx.root, '.gitignore'), 'utf8');
+  assert.match(gi, /^\/?\.claude\/worktrees\/$/m);
+  assert.equal((await doctor(ctx, { only: 'worktree-ignore' }))[0].status, 'pass');
+});
