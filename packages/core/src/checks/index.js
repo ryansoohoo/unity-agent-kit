@@ -8,3 +8,4 @@ import './blast-radius.js';
 import './unity-mcp.js';
 import './audit.js';
 import './skill-lint.js';
+import './orphans.js';
