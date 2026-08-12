@@ -24,7 +24,7 @@ if (flag('--undo')) {
 
 if (flag('--epoch')) {
   const snap = readEpoch(ctx.root);
-  console.log(JSON.stringify({ present: !!snap, fresh: isFresh(snap), ...(snap ?? {}) }, null, 2));
+  console.log(JSON.stringify({ ...(snap ?? {}), present: !!snap, fresh: isFresh(snap) }, null, 2));
   process.exit(0);
 }
 

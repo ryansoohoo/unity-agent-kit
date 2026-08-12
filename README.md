@@ -101,7 +101,7 @@ Headless proof (CI or dogfood):
 
 ## What the doctor checks
 
-Eleven checks, each with `detect` (read-only) and `explain` (why it matters). Five of them —
+Twelve checks, each with `detect` (read-only) and `explain` (why it matters). Five of them —
 `merge-driver`, `longpaths`, `worktree-ignore`, `blast-radius`, `unity-mcp` — also have
 `apply` (consented, undoable). `merge-driver` additionally has `verify`: a 5-case regression
 suite that proves the fix, not just a re-check of the same detect logic.
@@ -119,6 +119,7 @@ suite that proves the fix, not just a re-check of the same detect logic.
 | `audit` | Scans local Claude Code transcripts for Unity failure signatures; ranked triage with confidence, `file:line` links, and per-session token/retry tallies. Local-only: uploads nothing. See "Daily sweep" below. |
 | `skill-lint` | Resting token cost, "Use when" firing conditions, negative triggers, and overlap across installed skill descriptions. |
 | `orphans` | Extra Unity.exe processes, orphaned dotnet compile servers, stale `Temp/UnityLockfile`, locked git worktrees. Lists PIDs; killing anything stays a human decision. |
+| `kanabo` | The v2 reload-boundary signal as a doctor row: reports the live epoch/state from `Temp/unity-agent-kit/epoch.json` when the editor is running the kit's UPM package. Detect-only, `pass`/`na` — an idle or absent editor is a state, not a defect. |
 
 Proof results persist to `.unity-agent-kit/verify.json` in the target repo:
 if the last real-merge proof FAILED, the doctor shows `warn` even though the
@@ -141,7 +142,9 @@ v2 ships the smallest thing that fixes it — a signal, not a tool surface:
   works unfocused and headless (unfocused editors never auto-import; that is
   a measured hazard, not folklore).
 - Stale reads become *detectable*: capture `epoch` before an edit, require it
-  to increase after. The `kanabo` doctor row reports the live signal.
+  to increase after. (A bump proves a reload happened after your capture — if
+  something else can also trigger imports, verify content too.) The `kanabo`
+  doctor row reports the live signal.
 - Scope ceiling: no scene ops, no eval, no serializers — a status file out,
   one refresh verb in. The vendor CLI/MCP remains the tool surface; this is
   the correctness residual under it.

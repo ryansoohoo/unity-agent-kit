@@ -23,7 +23,15 @@ polling via the Unity CLI, never to a timed sleep. To force an import with
 the editor unfocused or headless, write `Temp/unity-agent-kit/refresh.request`
 (any content) and poll again. Hard deadline always (120 s default) — on
 timeout, say so and stop; a hung wait reported honestly beats a sleep that
-lies.
+lies. If the state passed through "compiling" but returned to "ready"
+WITHOUT an epoch bump, the compile almost certainly FAILED — stop waiting
+and read the console/Editor.log for errors instead of running out the
+deadline.
+
+One honest caveat: an epoch bump proves a reload happened after your capture,
+not that it contains YOUR edit — trustworthy only when you are the sole import
+trigger. With a human also using the editor, verify content (eval a probe) or
+wait for a second bump / a worldRevision advance.
 
 ## 2. Console read
 BAD:  dump the entire console (20k tokens of duplicate warnings).

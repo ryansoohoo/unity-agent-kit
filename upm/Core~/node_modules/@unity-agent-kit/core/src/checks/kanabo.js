@@ -13,6 +13,6 @@ register({
     const snap = readEpoch(ctx.root);
     if (!snap) return { status: 'na', evidence: 'no epoch signal — install the kit\'s UPM package and open the project in the editor once (v2)' };
     if (!isFresh(snap)) return { status: 'na', evidence: `editor not running (heartbeat stale; last epoch ${snap.epoch})` };
-    return { status: 'pass', evidence: `epoch ${snap.epoch} · revision ${snap.worldRevision} · state ${snap.state}` };
+    return { status: 'pass', evidence: `epoch ${snap.epoch} - revision ${snap.worldRevision} - state ${snap.state}` };
   },
 });
