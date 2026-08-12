@@ -18,6 +18,18 @@ are Windows-only concerns), others simply haven't been verified yet.
 
 ### Door 1: npx CLI
 
+The published `npx unity-agent-kit` form ships with the npm release; until then, run it from
+a clone (below) — the CLI itself is fully working today, only the npm publish step is pending.
+
+```
+# From a clone of this repo (works today):
+npm install
+node packages/cli/bin/kit.js /path/to/your/unity/project          # doctor
+node packages/cli/bin/kit.js --fix /path/to/your/unity/project     # wizard
+```
+
+Once published to npm:
+
 ```
 npx unity-agent-kit
 ```
@@ -31,7 +43,7 @@ npx unity-agent-kit --fix
 Runs the per-step consent wizard: walks each failing check, shows you the evidence and the
 one-line why, and asks `Apply? [y/N/a/q]` before touching anything.
 
-Other flags:
+Other flags (same for both forms above):
 - `--yes` — apply without prompting (for CI; still per-check, just non-interactive)
 - `--only <layer|id>` — scope to one layer (e.g. `hygiene`) or one check id (e.g. `merge-driver`)
 - `--undo` — reverse everything the kit has applied in this project
