@@ -60,19 +60,32 @@ namespace UnityAgentKit.Doctor
             {
                 using (var p = Process.Start(psi))
                 {
-                    // Read BOTH streams to the end before WaitForExit — reversing
-                    // this order can deadlock on a full stderr pipe buffer.
-                    stdout = p.StandardOutput.ReadToEnd();
-                    stderr = p.StandardError.ReadToEnd();
-                    p.WaitForExit(120000);
+                    // Drain BOTH pipes concurrently — a sequential ReadToEnd pair can
+                    // deadlock when the un-drained pipe's buffer fills. The timeout is
+                    // load-bearing: on expiry we kill node and fail loudly.
+                    var so = p.StandardOutput.ReadToEndAsync();
+                    var se = p.StandardError.ReadToEndAsync();
+                    if (!p.WaitForExit(120000))
+                    {
+                        try { p.Kill(); } catch { }
+                        LastError = "doctor timed out after 120s — kill any stuck node process and run again.";
+                        return false;
+                    }
+                    stdout = so.Result;
+                    stderr = se.Result;
                     code = p.ExitCode;
                     return true;
                 }
             }
-            catch (Exception e) // node not on PATH lands here (Win32Exception)
+            catch (System.ComponentModel.Win32Exception e) // node not on PATH lands here
             {
                 LastError = "Could not run `node` — the doctor needs Node >= 20 on PATH.\n" +
                             "Install it from https://nodejs.org, restart Unity (PATH is read at launch), then run again.\n(" + e.Message + ")";
+                return false;
+            }
+            catch (Exception e)
+            {
+                LastError = "doctor process failed: " + e.Message;
                 return false;
             }
         }

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Linq;
 using UnityEditor;
 using UnityEngine;
@@ -12,7 +13,14 @@ namespace UnityAgentKit.Doctor
     {
         public static void Run()
         {
-            var rows = KitDoctor.RunDoctor();
+            List<KitRow> rows;
+            try { rows = KitDoctor.RunDoctor(); }
+            catch (System.Exception e)
+            {
+                Debug.LogError("[unity-agent-kit] doctor did not run: " + e);
+                EditorApplication.Exit(2);
+                return;
+            }
             if (rows == null)
             {
                 Debug.LogError("[unity-agent-kit] doctor did not run: " + KitDoctor.LastError);

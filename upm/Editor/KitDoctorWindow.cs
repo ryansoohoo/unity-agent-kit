@@ -16,7 +16,7 @@ namespace UnityAgentKit.Doctor
         {
             var w = GetWindow<KitDoctorWindow>("Agent Kit");
             w.minSize = new Vector2(520, 300);
-            w.Refresh();
+            EditorApplication.delayCall += w.Refresh;
         }
 
         void Refresh()
@@ -37,6 +37,8 @@ namespace UnityAgentKit.Doctor
             if (!string.IsNullOrEmpty(error)) { EditorGUILayout.HelpBox(error, MessageType.Error); return; }
             if (rows == null) { EditorGUILayout.HelpBox("Run doctor to inspect this project.", MessageType.Info); return; }
 
+            string toFix = null;
+            string toFixExplain = null;
             scroll = EditorGUILayout.BeginScrollView(scroll);
             foreach (var r in rows)
             {
@@ -51,18 +53,26 @@ namespace UnityAgentKit.Doctor
                 EditorGUILayout.EndVertical();
                 if (r.status == "fail" && r.canApply && GUILayout.Button("Fix…", GUILayout.Width(48)))
                 {
-                    // Per-check consent lives HERE; the CLI below runs non-interactive.
-                    if (EditorUtility.DisplayDialog("Unity Agent Kit — " + r.id, r.explain + "\n\nApply this fix?", "Apply", "Cancel"))
-                    {
-                        lastApply = KitDoctor.ApplyOne(r.id);
-                        rows = KitDoctor.RunDoctor();
-                        error = KitDoctor.LastError;
-                    }
+                    toFix = r.id;
+                    toFixExplain = r.explain;
                 }
                 EditorGUILayout.EndHorizontal();
             }
             EditorGUILayout.EndScrollView();
             if (!string.IsNullOrEmpty(lastApply)) EditorGUILayout.HelpBox(lastApply, MessageType.Info);
+
+            if (toFix != null)
+            {
+                // Deferred past all layout groups: a modal + row swap mid-layout
+                // desyncs IMGUI's control count. Per-check consent lives HERE;
+                // the CLI below runs non-interactive.
+                if (EditorUtility.DisplayDialog("Unity Agent Kit — " + toFix, toFixExplain + "\n\nApply this fix?", "Apply", "Cancel"))
+                {
+                    lastApply = KitDoctor.ApplyOne(toFix);
+                    Refresh();
+                }
+                GUIUtility.ExitGUI();
+            }
         }
     }
 }
