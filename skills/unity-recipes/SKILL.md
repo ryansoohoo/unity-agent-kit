@@ -1,6 +1,6 @@
 ---
 name: unity-recipes
-description: Use when performing common Unity agent operations (compile-wait, console read, refresh, perf probe, scene edit) - each recipe pairs a bad pattern with the good one. Do NOT use for topology or merge decisions.
+description: Use when doing common Unity agent operations (compile-wait, console read, refresh, perf probe, scene edit); each recipe pairs a bad and good pattern. Do NOT use for topology or merge decisions.
 ---
 
 # Recipes: the bad pattern next to the good one
