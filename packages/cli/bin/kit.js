@@ -4,13 +4,14 @@ import '@unity-agent-kit/core/src/checks/index.js';
 import { doctor, applyOne } from '@unity-agent-kit/core/src/engine.js';
 import { getCheck } from '@unity-agent-kit/core/src/registry.js';
 import { undoAll } from '@unity-agent-kit/core/src/audit.js';
-import { readEpoch, isFresh } from '@unity-agent-kit/core/src/kanabo.js';
+import { readEpoch, isFresh, waitReady } from '@unity-agent-kit/core/src/kanabo.js';
 import readline from 'node:readline/promises';
 
 const args = process.argv.slice(2);
 const flag = (f) => args.includes(f);
 const opt = (f) => { const i = args.indexOf(f); return i >= 0 ? args[i + 1] : undefined; };
-const root = args.find(a => !a.startsWith('--') && a !== opt('--only')) ?? process.cwd();
+const OPT_FLAGS = ['--only', '--since-epoch', '--timeout-ms', '--poll-ms'];
+const root = args.find((a, i) => !a.startsWith('--') && !OPT_FLAGS.includes(args[i - 1])) ?? process.cwd();
 
 const GLYPH = { pass: 'OK  ', warn: 'WARN', fail: 'FAIL', na: '--  ' };
 
@@ -26,6 +27,17 @@ if (flag('--epoch')) {
   const snap = readEpoch(ctx.root);
   console.log(JSON.stringify({ ...(snap ?? {}), present: !!snap, fresh: isFresh(snap) }, null, 2));
   process.exit(0);
+}
+
+if (flag('--wait-ready')) {
+  const r = await waitReady(ctx.root, {
+    sinceEpoch: opt('--since-epoch') !== undefined ? Number(opt('--since-epoch')) : -1,
+    requireEpochBump: opt('--since-epoch') !== undefined,
+    timeoutMs: opt('--timeout-ms') !== undefined ? Number(opt('--timeout-ms')) : 120000,
+    pollMs: opt('--poll-ms') !== undefined ? Number(opt('--poll-ms')) : 250,
+  });
+  console.log(JSON.stringify(r, null, 2));
+  process.exit(r.ok ? 0 : 1);
 }
 
 const rows = await doctor(ctx, { only: opt('--only') });

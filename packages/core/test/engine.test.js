@@ -109,3 +109,13 @@ test('doctor rows expose canApply and pass detect() detail through', async () =>
   assert.ok(!('detail' in a));
   assert.ok(rows.every(r => typeof r.canApply === 'boolean'));
 });
+
+test('a throwing detect() degrades to an na row instead of killing the doctor', async () => {
+  register({
+    id: 't-throws', layer: 'hygiene', title: 't', explain: () => 'x',
+    detect: async () => { throw new Error('EACCES: permission denied'); },
+  });
+  const rows = await doctor(createContext(tmpRepo()), { only: 't-throws' });
+  assert.equal(rows[0].status, 'na');
+  assert.match(rows[0].evidence, /detect crashed safely: EACCES/);
+});

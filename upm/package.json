@@ -1,6 +1,6 @@
 {
   "name": "com.unity-agent-kit.doctor",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "displayName": "Unity Agent Kit Doctor",
   "description": "Doctor window for agent-ready Unity: renders every unity-agent-kit check and applies fixes with per-check consent. Requires Node >= 20 on PATH. Windows + Unity 6 verified.",
   "unity": "6000.0",

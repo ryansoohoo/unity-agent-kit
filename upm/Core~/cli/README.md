@@ -1,3 +1,5 @@
+> This is the CLI door of the Unity Agent Kit monorepo — full docs and source at the repository link.
+
 # Unity Agent Kit
 
 Unity Agent Kit makes any Unity project agent-ready in one guided setup — checked git/repo

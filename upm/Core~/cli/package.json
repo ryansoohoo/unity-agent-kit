@@ -1,5 +1,8 @@
 {
-  "name": "unity-agent-kit", "version": "0.3.0", "type": "module",
+  "name": "unity-agent-kit", "version": "0.4.0", "type": "module",
   "bin": { "unity-agent-kit": "./bin/kit.js" },
-  "dependencies": { "@unity-agent-kit/core": "0.3.0" }
+  "dependencies": { "@unity-agent-kit/core": "0.4.0" },
+  "files": ["bin", "README.md"],
+  "repository": { "type": "git", "url": "git+https://github.com/OWNER/unity-agent-kit.git" },
+  "license": "MIT"
 }

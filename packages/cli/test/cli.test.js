@@ -129,3 +129,17 @@ test('--epoch is a machine-readable report: absent editor and live file both exi
   assert.equal(l.fresh, true);
   assert.equal(l.epoch, 9);
 });
+
+test('--wait-ready: ok on a fresh ready signal, no-editor exit 1 when absent', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'uak-'));
+  execFileSync('git', ['init', '-q', dir]);
+  const miss = run(['--wait-ready', '--timeout-ms', '400', dir], dir);
+  assert.equal(miss.code, 1);
+  assert.equal(JSON.parse(miss.out).reason, 'no-editor');
+  mkdirSync(join(dir, 'Temp', 'unity-agent-kit'), { recursive: true });
+  writeFileSync(join(dir, 'Temp', 'unity-agent-kit', 'epoch.json'),
+    JSON.stringify({ schema: 1, pid: 1, sessionId: 'x', epoch: 3, heartbeatMs: Date.now(), state: 'ready', worldRevision: 1, probePresent: false, probeValue: -1 }));
+  const hit = run(['--wait-ready', '--timeout-ms', '2000', dir], dir);
+  assert.equal(hit.code, 0);
+  assert.equal(JSON.parse(hit.out).epoch, 3);
+});

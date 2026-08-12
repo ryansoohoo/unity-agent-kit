@@ -34,7 +34,7 @@ namespace UnityAgentKit.Doctor
             return info != null ? Path.GetFullPath(info.resolvedPath) : null;
         }
 
-        static string ProjectRoot() => Path.GetDirectoryName(Application.dataPath);
+        static string ProjectRoot() => Path.GetDirectoryName(Application.dataPath).TrimEnd('\\');
 
         static bool Exec(string args, out int code, out string stdout, out string stderr)
         {
