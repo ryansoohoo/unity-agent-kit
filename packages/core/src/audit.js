@@ -38,6 +38,23 @@ export function undoAll(ctx) {
         if (op.previous === null) { rmSync(op.path, { force: true }); }
         else { writeFileSync(op.path, op.previous); }
         undone.push(`restored ${op.path}`);
+      } else if (op.kind === 'git-config-restore') {
+        if (op.previous === null) {
+          try {
+            execFileSync('git', ['config', '--unset', op.key], { cwd: ctx.root });
+            undone.push(`git config --unset ${op.key}`);
+          } catch (err) {
+            if (err.status === 5) {
+              // exit code 5 means key does not exist, treat as already unset
+              undone.push(`${op.key} already unset`);
+            } else {
+              throw new Error(`failed to unset git config ${op.key}: ${err.message}`);
+            }
+          }
+        } else {
+          execFileSync('git', ['config', op.key, op.previous], { cwd: ctx.root });
+          undone.push(`git config ${op.key} restored`);
+        }
       }
     }
   }

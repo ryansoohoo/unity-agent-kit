@@ -38,7 +38,8 @@ register({
     const dest = join(toolsDir, 'unity-yaml-merge.sh');
     const prev = existsSync(dest) ? readFileSync(dest, 'utf8') : null;
     copyFileSync(join(ASSETS, 'unity-yaml-merge.sh'), dest);
-    const prevDrv = ctx.git('config', '--get', 'merge.unityyamlmerge.driver');
+    const keys = ['merge.unityyamlmerge.driver', 'merge.unityyamlmerge.name', 'merge.unityyamlmerge.recursive'];
+    const prevCfg = keys.map(k => ({ k, r: ctx.git('config', '--get', k) }));
     ctx.git('config', 'merge.unityyamlmerge.name', 'Unity SmartMerge (headless, no GUI fallback)');
     ctx.git('config', 'merge.unityyamlmerge.driver', `sh '${toPosix(dest)}' %O %A %B %P`);
     ctx.git('config', 'merge.unityyamlmerge.recursive', 'binary');
@@ -46,11 +47,7 @@ register({
       changed: [dest, 'git config merge.unityyamlmerge.*'],
       undo: [
         { kind: 'restore-file', path: dest, previous: prev },
-        ...(prevDrv.ok ? [] : [
-          { kind: 'git-config-unset', key: 'merge.unityyamlmerge.driver' },
-          { kind: 'git-config-unset', key: 'merge.unityyamlmerge.name' },
-          { kind: 'git-config-unset', key: 'merge.unityyamlmerge.recursive' },
-        ]),
+        ...prevCfg.map(({ k, r }) => ({ kind: 'git-config-restore', key: k, previous: r.ok ? r.out : null })),
       ],
     };
   },

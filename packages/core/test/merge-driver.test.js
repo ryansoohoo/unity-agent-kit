@@ -8,6 +8,7 @@ import { createContext } from '../src/context.js';
 import '../src/checks/index.js';
 import { getCheck } from '../src/registry.js';
 import { doctor, applyOne } from '../src/engine.js';
+import { undoAll } from '../src/audit.js';
 
 function tmpRepo() {
   const dir = mkdtempSync(join(tmpdir(), 'uak-'));
@@ -35,4 +36,14 @@ test('apply installs script + config; detect passes; verify runs the 5-case suit
   assert.equal(ctx.git('config', '--get', 'merge.unityyamlmerge.driver').ok, true);
   assert.equal((await doctor(ctx, { only: 'merge-driver' }))[0].status, 'pass');
   assert.equal(res.verify.ok, true, res.verify.proof);
+});
+
+test('undo restores a pre-existing git config value instead of wiping it', async () => {
+  const ctx = createContext(tmpRepo());
+  const fs = await import('node:fs');
+  fs.writeFileSync(join(ctx.root, '.gitattributes'), '*.unity merge=unityyamlmerge\n*.meta merge=unityyamlmerge\n');
+  ctx.git('config', 'merge.unityyamlmerge.driver', 'custom-driver');
+  await applyOne(ctx, 'merge-driver');
+  undoAll(ctx);
+  assert.equal(ctx.git('config', '--get', 'merge.unityyamlmerge.driver').out, 'custom-driver');
 });
