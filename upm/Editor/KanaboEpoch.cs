@@ -14,21 +14,24 @@ namespace UnityAgentKit.Doctor
     // Also answers Temp/unity-agent-kit/refresh.request with
     // AssetDatabase.Refresh() — the explicit import trigger that works with
     // the editor unfocused or headless.
-    // ZERO tool surface by design (docs/kanabo/KILL-CRITERIA.md scope
-    // ceiling): no scene ops, no eval, no serializers. A status file out,
-    // one refresh verb in. That's all this will ever be.
+    // ZERO tool surface by design: no scene ops, no eval, no serializers.
+    // A status file out, one refresh verb in. That's all this will ever be.
     [InitializeOnLoad]
     public static class KanaboEpoch
     {
         const double HeartbeatSeconds = 0.5;
+        const double RefreshGraceSeconds = 5.0;
 
         static readonly string Dir = Path.Combine(Path.GetDirectoryName(Application.dataPath), "Temp", "unity-agent-kit");
         static readonly string StatusPath = Path.Combine(Dir, "epoch.json");
         static readonly string RequestPath = Path.Combine(Dir, "refresh.request");
 
         static readonly int Epoch;
+        static readonly int Pid;
         static string state = "ready";
         static double lastWrite;
+        static double refreshGraceUntil = -1.0;
+        static bool sawWorkSinceRefresh;
 
         [Serializable]
         class Snapshot
@@ -46,27 +49,41 @@ namespace UnityAgentKit.Doctor
 
         static KanaboEpoch()
         {
-            // The static ctor reruns after EVERY domain reload — that IS the epoch.
-            Epoch = SessionState.GetInt("uak.epoch", 0) + 1;
-            SessionState.SetInt("uak.epoch", Epoch);
-            if (string.IsNullOrEmpty(SessionState.GetString("uak.sessionId", "")))
-                SessionState.SetString("uak.sessionId", Guid.NewGuid().ToString("N"));
-
-            CompilationPipeline.compilationStarted += _ => { state = "compiling"; Write(); };
-            AssemblyReloadEvents.beforeAssemblyReload += () =>
+            // Import workers run InitializeOnLoad too — they must never write
+            // the status file or answer refresh requests (their epoch would go
+            // BACKWARDS and stomp the hot editor's signal).
+            if (AssetDatabase.IsAssetImportWorkerProcess()) return;
+            try
             {
-                // Stamp the file BEFORE the domain dies so pollers can tell an
-                // intentional gap from a hung editor.
-                state = "reloading";
+                Pid = System.Diagnostics.Process.GetCurrentProcess().Id;
+                // The static ctor reruns after EVERY domain reload — that IS the epoch.
+                Epoch = SessionState.GetInt("uak.epoch", 0) + 1;
+                SessionState.SetInt("uak.epoch", Epoch);
+                if (string.IsNullOrEmpty(SessionState.GetString("uak.sessionId", "")))
+                    SessionState.SetString("uak.sessionId", Guid.NewGuid().ToString("N"));
+
+                // Never claim ready before looking: initial project open runs
+                // InitializeOnLoad while the first import is still going.
+                state = (EditorApplication.isCompiling || EditorApplication.isUpdating) ? "compiling" : "ready";
+
+                CompilationPipeline.compilationStarted += _ => { state = "compiling"; Write(); };
+                AssemblyReloadEvents.beforeAssemblyReload += () =>
+                {
+                    // Stamp the file BEFORE the domain dies so pollers can tell an
+                    // intentional gap from a hung editor.
+                    state = "reloading";
+                    Write();
+                };
+                EditorApplication.update += Tick;
                 Write();
-            };
-            EditorApplication.update += Tick;
-            Write();
+            }
+            catch { /* a failed signal must never poison the type — a throwing static ctor would re-throw TypeInitializationException on every later touch */ }
         }
 
         internal static void BumpWorldRevision()
         {
-            SessionState.SetInt("uak.worldRevision", SessionState.GetInt("uak.worldRevision", 0) + 1);
+            try { SessionState.SetInt("uak.worldRevision", SessionState.GetInt("uak.worldRevision", 0) + 1); }
+            catch { /* never break an import batch over the counter */ }
         }
 
         static void Tick()
@@ -79,15 +96,26 @@ namespace UnityAgentKit.Doctor
                 if (File.Exists(RequestPath))
                 {
                     File.Delete(RequestPath);
-                    state = "compiling"; // pessimistic: a refresh may trigger imports + reload
+                    // Pessimistic until the refresh visibly starts work (compile or
+                    // import) or the grace window passes with nothing to do — Unity
+                    // QUEUES compilation, so isCompiling is still false the moment
+                    // Refresh() returns.
+                    state = "compiling";
+                    refreshGraceUntil = now + RefreshGraceSeconds;
+                    sawWorkSinceRefresh = false;
                     Write();
                     AssetDatabase.Refresh();
                 }
             }
             catch { /* a torn request is retried on the next tick */ }
 
+            var busy = EditorApplication.isCompiling || EditorApplication.isUpdating;
             if (state != "reloading")
-                state = EditorApplication.isCompiling ? "compiling" : "ready";
+            {
+                if (busy) { state = "compiling"; sawWorkSinceRefresh = true; refreshGraceUntil = -1.0; }
+                else if (now < refreshGraceUntil && !sawWorkSinceRefresh) state = "compiling"; // the queue gap
+                else state = "ready";
+            }
             Write();
         }
 
@@ -100,7 +128,7 @@ namespace UnityAgentKit.Doctor
                 var s = new Snapshot
                 {
                     schema = 1,
-                    pid = System.Diagnostics.Process.GetCurrentProcess().Id,
+                    pid = Pid,
                     sessionId = SessionState.GetString("uak.sessionId", ""),
                     epoch = Epoch,
                     heartbeatMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
