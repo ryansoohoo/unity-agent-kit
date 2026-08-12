@@ -98,3 +98,23 @@ test('audit: garbage transcripts never crash the doctor', async () => {
     assert.equal(r.status, 'na');
   } finally { delete process.env.UAK_TRANSCRIPTS; }
 });
+
+test('audit: structurally weird sessions run all scanners + tally without crashing', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'uak-fx-'));
+  writeFileSync(join(dir, 'weird.jsonl'), [
+    JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'x', name: 'Bash', input: { command: { toString: 'not-callable' } } }] } }),
+    JSON.stringify({ type: 'assistant', message: { content: 'not-an-array' } }),
+    JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', content: 42 }] } }),
+  ].join('\n') + '\n');
+  process.env.UAK_TRANSCRIPTS = dir;
+  try {
+    const r = await audit.detect(createContext(mkdtempSync(join(tmpdir(), 'uak-au-'))));
+    assert.ok(['pass', 'warn'].includes(r.status));
+    assert.equal(r.detail.sessions.length, 1);
+    const s = r.detail.sessions[0];
+    assert.ok(s.file.endsWith('weird.jsonl'));
+    assert.equal(s.toolCalls, 1);
+    assert.deepEqual(s.tokens, { input: 0, output: 0 });
+    assert.equal(s.retries, 0);
+  } finally { delete process.env.UAK_TRANSCRIPTS; }
+});

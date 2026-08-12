@@ -1,16 +1,17 @@
 import { register, getCheck } from '../registry.js';
 import { transcriptDirFor, readSessions, toolUses, toolResults, usageTotals } from '../transcripts.js';
+import './blast-radius.js';
 
 const EDIT_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit']);
 const isBash = (t) => t.name === 'Bash' || t.name === 'PowerShell';
-const cmd = (t) => String(t.input?.command ?? '');
+const cmd = (t) => { try { return String(t.input?.command ?? ''); } catch { return ''; } };
 const editedFile = (t) => (EDIT_TOOLS.has(t.name) ? String(t.input?.file_path ?? t.input?.notebook_path ?? '') : null);
 
 const SLEEP_RE = /(^|[;&|(]\s*)sleep\s+\d|Start-Sleep|(^|[;&|(]\s*)timeout\s+\/t\s+\d/im;
 const PORT_RE = /(?:localhost|127\.0\.0\.1):(\d{2,5})/;
 // Command-shaped mirrors of the blast-radius DENY_RULES (those are permission
 // patterns like "Bash(git clean:*)", not regexes — keep the two lists in sync).
-const DESTRUCTIVE_RES = [/\bgit\s+clean\b/, /\bgit\s+reset\s+--hard\b/, /\brm\s+-(?:rf?|fr)\b/, /\brmdir\s+\/s\b/i, /Remove-Item\b[^\n]*-Recurse/i];
+const DESTRUCTIVE_RES = [/\bgit\s+clean\b/i, /\bgit\s+reset\s+--hard\b/i, /\brm\s+-(?:rf?|fr)\b/i, /\brmdir\s+\/s\b/i, /Remove-Item\b[^\n]*-Recurse/i];
 const DUMP_LIMIT = 50_000;
 
 // Each signature scans ONE session and returns [{ line, message }].
@@ -94,14 +95,16 @@ register({
   detect: async (ctx) => {
     let sessions, dir;
     try {
-      dir = process.env.UAK_TRANSCRIPTS ?? transcriptDirFor(ctx.root);
+      dir = process.env.UAK_TRANSCRIPTS || transcriptDirFor(ctx.root);
       sessions = readSessions(dir);
     } catch { return { status: 'na', evidence: 'transcript scan failed safely — format may have changed' }; }
     if (!sessions.length) return { status: 'na', evidence: `no local transcripts for this project (looked in ${dir})` };
 
     // Classification: destructive findings are superseded once deny rules are
     // installed; the low-confidence empty-response heuristic is safe-to-ignore.
-    const denyNow = (await getCheck('blast-radius').detect(ctx)).status === 'pass';
+    let denyNow = false;
+    try { denyNow = (await getCheck('blast-radius')?.detect(ctx))?.status === 'pass'; }
+    catch { /* conservative: treat deny rules as absent */ }
     const classOf = (sigId) =>
       sigId === 'destructive-near-miss' ? (denyNow ? 'superseded' : 'fix-now')
       : sigId === 'accepted-empty-response' ? 'safe-to-ignore'
@@ -118,8 +121,10 @@ register({
         });
       }
     }
-    findings.sort((a, b) => CLASS_ORDER.indexOf(a.class) - CLASS_ORDER.indexOf(b.class) || b.confidence - a.confidence);
-    const detail = { findings, sessions: sessions.map(sessionTally) };
+    findings.sort((a, b) => CLASS_ORDER.indexOf(a.class) - CLASS_ORDER.indexOf(b.class) || b.confidence - a.confidence || String(a.file).localeCompare(String(b.file)) || a.line - b.line);
+    const tally = [];
+    for (const s of sessions) { try { tally.push(sessionTally(s)); } catch { /* one weird session never kills the tally */ } }
+    const detail = { findings, sessions: tally };
     if (!findings.length) return { status: 'pass', evidence: `no failure signatures in ${sessions.length} session(s)`, detail };
     const byClass = CLASS_ORDER.map(c => [c, findings.filter(f => f.class === c).length]).filter(([, n]) => n);
     return {
