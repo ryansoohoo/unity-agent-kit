@@ -12,7 +12,7 @@ register({
     'lost, and these are exactly the files whose merges are dangerous. Commit before agent sessions. ' +
     'The kit never commits for you.',
   detect: async (ctx) => {
-    const st = ctx.git('status', '--porcelain');
+    const st = ctx.git('-c', 'core.quotepath=false', 'status', '--porcelain');
     if (!st.ok) return { status: 'na', evidence: 'not a git repo' };
     const lines = st.out ? st.out.split('\n') : [];
     const paths = lines.map(l => l.slice(3).replace(/^"|"$/g, ''));

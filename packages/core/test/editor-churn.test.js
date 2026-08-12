@@ -35,3 +35,17 @@ test('passes on a clean tree', async () => {
   const d = repoWith({ 'Assets/Main.unity': 'a' });
   assert.equal((await doctor(createContext(d), { only: 'editor-churn' }))[0].status, 'pass');
 });
+
+test('churn-only: warns on unstaged ProjectSettings churn alone', async () => {
+  const d = repoWith({ 'ProjectSettings/ProjectSettings.asset': 'b' });
+  writeFileSync(join(d, 'ProjectSettings', 'ProjectSettings.asset'), 'changed');
+  const r = (await doctor(createContext(d), { only: 'editor-churn' }))[0];
+  assert.equal(r.status, 'warn');
+  assert.match(r.evidence, /ProjectSettings\.asset/);
+});
+
+test('na on non-git directory', async () => {
+  const d = mkdtempSync(join(tmpdir(), 'uak-'));
+  const r = (await doctor(createContext(d), { only: 'editor-churn' }))[0];
+  assert.equal(r.status, 'na');
+});

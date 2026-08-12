@@ -7,9 +7,9 @@ export function createContext(projectRoot) {
     git(...args) {
       try {
         const out = execFileSync('git', args, { cwd: projectRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
-        return { ok: true, out: out.trim(), code: 0 };
+        return { ok: true, out: out.replace(/[\r\n]+$/, ''), code: 0 };
       } catch (e) {
-        return { ok: false, out: `${e.stdout ?? ''}${e.stderr ?? ''}`.trim(), code: e.status ?? 1 };
+        return { ok: false, out: `${e.stdout ?? ''}${e.stderr ?? ''}`.replace(/[\r\n]+$/, ''), code: e.status ?? 1 };
       }
     },
   };
