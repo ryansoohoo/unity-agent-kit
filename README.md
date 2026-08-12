@@ -23,7 +23,8 @@ a clone (below) — the CLI itself is fully working today, only the npm publish 
 
 ```
 # From a clone of this repo (works today):
-npm install
+git clone <this-repo> unity-agent-kit && cd unity-agent-kit
+npm install    # zero runtime deps — this only links the workspace packages
 node packages/cli/bin/kit.js /path/to/your/unity/project          # doctor
 node packages/cli/bin/kit.js --fix /path/to/your/unity/project     # wizard
 ```
@@ -48,6 +49,7 @@ Other flags (same for both forms above):
 - `--only <layer|id>` — scope to one layer (e.g. `hygiene`) or one check id (e.g. `merge-driver`)
 - `--undo` — reverse everything the kit has applied in this project
 - `--json` — machine-readable output
+- `--epoch` — print the v2 reload-boundary signal as JSON and exit 0 (see the Kanabō section)
 
 Exit code is `1` if and only if at least one check is failing; `0` otherwise.
 
@@ -75,7 +77,9 @@ Node runtime — that keeps the repo binary-free and the core zero-dependency.
 If Node is missing, the window says exactly that and links the installer;
 install Node, restart Unity (it reads PATH at launch), and run again.
 
-Install from a local clone — add to `Packages/manifest.json`:
+Install from a local clone — add to `Packages/manifest.json` (note: `file:`
+paths resolve relative to your project's `Packages/` folder, not the project
+root):
 
     "com.unity-agent-kit.doctor": "file:../../path-to/unity-agent-kit/upm"
 
@@ -86,6 +90,10 @@ or straight from git:
 (The git URL works once the repo is published — until then, use the local `file:` install above.)
 
 Deep bundle paths ride along (`Core~/node_modules/...`) — if your project sits near the MAX_PATH cliff, the kit's own `longpaths`/`path-headroom` checks are the fix.
+
+Fixes applied from the window are recorded to `.unity-agent-kit/applied.json`
+like any other door; undoing them currently needs the CLI door (`--undo`) —
+the window has no undo button yet.
 
 Headless proof (CI or dogfood):
 
