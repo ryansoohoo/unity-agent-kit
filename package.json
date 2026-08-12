@@ -3,6 +3,6 @@
   "private": true,
   "type": "module",
   "workspaces": ["packages/*"],
-  "scripts": { "test": "node --test --test-concurrency=1 packages/core/test/**/*.test.js packages/cli/test/**/*.test.js", "build:plugin": "node scripts/build-plugin.mjs" },
+  "scripts": { "test": "node --test --test-concurrency=1 packages/core/test/**/*.test.js packages/cli/test/**/*.test.js", "build:plugin": "node scripts/build-plugin.mjs", "check:fresh": "node scripts/build-plugin.mjs --check" },
   "engines": { "node": ">=20" }
 }
