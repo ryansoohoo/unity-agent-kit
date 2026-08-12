@@ -5,8 +5,10 @@ export async function doctor(ctx, { only } = {}) {
   const rows = [];
   for (const c of checks) {
     if (only && c.id !== only && c.layer !== only) continue;
-    const { status, evidence } = await c.detect(ctx);
-    rows.push({ id: c.id, layer: c.layer, title: c.title, status, evidence });
+    const res = await c.detect(ctx);
+    const row = { id: c.id, layer: c.layer, title: c.title, status: res.status, evidence: res.evidence, canApply: typeof c.apply === 'function' };
+    if (res.detail !== undefined) row.detail = res.detail;
+    rows.push(row);
   }
   return rows;
 }

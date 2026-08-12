@@ -89,3 +89,23 @@ test('undoAll handles already-unset git config gracefully', async () => {
   assert.equal(u.undone.length, 1);
   assert.match(u.undone[0], /already unset/);
 });
+
+test('doctor rows expose canApply and pass detect() detail through', async () => {
+  register({
+    id: 't-detail', layer: 'hygiene', title: 't', explain: () => 'x',
+    detect: async () => ({ status: 'warn', evidence: 'e', detail: { findings: [{ n: 1 }] } }),
+  });
+  register({
+    id: 't-applyable', layer: 'hygiene', title: 't', explain: () => 'x',
+    detect: async () => ({ status: 'pass', evidence: 'e' }),
+    apply: async () => ({ changed: [], undo: [] }),
+  });
+  const rows = await doctor(createContext(tmpRepo()), {});
+  const d = rows.find(r => r.id === 't-detail');
+  const a = rows.find(r => r.id === 't-applyable');
+  assert.equal(d.canApply, false);
+  assert.deepEqual(d.detail, { findings: [{ n: 1 }] });
+  assert.equal(a.canApply, true);
+  assert.ok(!('detail' in a));
+  assert.ok(rows.every(r => typeof r.canApply === 'boolean'));
+});

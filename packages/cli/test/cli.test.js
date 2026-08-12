@@ -71,3 +71,12 @@ test('--fix without --yes on non-TTY exits 2', () => {
   execFileSync('git', ['init', '-q', dir]);
   assert.equal(run(['--fix'], dir).code, 2);
 });
+
+test('--json rows include a boolean canApply (UPM door contract)', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'uak-'));
+  execFileSync('git', ['init', '-q', dir]);
+  const rows = JSON.parse(run(['--json'], dir).out);
+  for (const r of rows) assert.equal(typeof r.canApply, 'boolean', `${r.id} missing canApply`);
+  assert.equal(rows.find(r => r.id === 'merge-driver').canApply, true);
+  assert.equal(rows.find(r => r.id === 'editor-churn').canApply, false);
+});
