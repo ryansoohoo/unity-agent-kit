@@ -1,0 +1,41 @@
+---
+name: unity-verify
+description: Use when verifying Unity C# changes compile or behave - picks the cheapest of three tiers. Do NOT use for merge conflicts (unity-merge) or deciding where agents run (unity-topology).
+---
+
+# Unity verification: three tiers, cheapest first
+
+STOP CONDITION: answer at the cheapest tier that resolves the question, stop after
+it passes, and ask before escalating to Tier 2. Sweet-spot effort, not max effort.
+
+## Tier 0 — eval (~300 ms, no reload)
+`unity command eval "<expr>"` (Unity CLI) runs Roslyn-compiled C# in the live
+editor with NO recompile and NO domain reload. Use for: scene queries, asset
+lookups, probes, "did my change take?". Mono only.
+
+## Tier 1 — headless typecheck (~0.6 s, no editor)
+`dotnet build Assembly-CSharp.csproj` gives Roslyn compile errors with no editor.
+A pass means "types are sound", NOT "Unity will accept this" (no Burst, source
+generators, or ScriptedImporters; csproj is stale until Unity regenerates it).
+Default loop for code-only work in worktrees.
+
+## Tier 2 — real compile + domain reload (~2.2 s+, serialized)
+Needed only when: a new type must become attachable, an asmdef changed, or
+scene/asset mutation follows. Protocol:
+1. Trigger explicitly (`unity command recompile`). An UNFOCUSED editor never
+   auto-imports — measured 90+ seconds of nothing. Never write-and-wait.
+2. DISCARD the trigger call's response. The reload kills the connection carrying
+   it; a killed request can return a well-formed EMPTY 200 (silent false success).
+3. Poll `recompile_status` (idle/triggered/compiling/completed/up_to_date) —
+   designed to stay readable while the main thread is blocked.
+4. Retry on wall-clock budget, never on error codes: dead local ports TIME OUT
+   on Windows (SYN dropped), they do not refuse.
+
+## Never
+- Never trust an empty response body as success.
+- Never `sleep` as a compile wait — poll status.
+- Never claim a perf fix without before/after numbers captured at real settings
+  (bad: rewrite the suspected system from code-reading; good: eval-inject debug
+  toggles and binary-search suspects against live profiler/frame numbers).
+- Before handing back, re-read your own diff against the bad patterns in
+  unity-recipes; report hits as triage notes, not blockers.
