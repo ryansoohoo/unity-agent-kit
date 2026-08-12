@@ -4,6 +4,7 @@ import '@unity-agent-kit/core/src/checks/index.js';
 import { doctor, applyOne } from '@unity-agent-kit/core/src/engine.js';
 import { getCheck } from '@unity-agent-kit/core/src/registry.js';
 import { undoAll } from '@unity-agent-kit/core/src/audit.js';
+import { readEpoch, isFresh } from '@unity-agent-kit/core/src/kanabo.js';
 import readline from 'node:readline/promises';
 
 const args = process.argv.slice(2);
@@ -18,6 +19,12 @@ const ctx = createContext(root);
 if (flag('--undo')) {
   const { undone } = undoAll(ctx);
   console.log(undone.length ? undone.map(u => `  undid: ${u}`).join('\n') : '  nothing to undo');
+  process.exit(0);
+}
+
+if (flag('--epoch')) {
+  const snap = readEpoch(ctx.root);
+  console.log(JSON.stringify({ present: !!snap, fresh: isFresh(snap), ...(snap ?? {}) }, null, 2));
   process.exit(0);
 }
 

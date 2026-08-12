@@ -111,3 +111,21 @@ test('a warn from a failed recorded proof is repairable via --fix (not stuck)', 
   assert.match(fix.out, /\[merge-driver\]/); // offered, no longer stuck
   assert.equal(fix.code, 0, fix.out);
 });
+
+test('--epoch is a machine-readable report: absent editor and live file both exit 0', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'uak-'));
+  execFileSync('git', ['init', '-q', dir]);
+  const absent = run(['--epoch'], dir);
+  assert.equal(absent.code, 0, absent.out);
+  const a = JSON.parse(absent.out);
+  assert.equal(a.present, false);
+  assert.equal(a.fresh, false);
+  mkdirSync(join(dir, 'Temp', 'unity-agent-kit'), { recursive: true });
+  writeFileSync(join(dir, 'Temp', 'unity-agent-kit', 'epoch.json'),
+    JSON.stringify({ schema: 1, pid: 1, sessionId: 'x', epoch: 9, heartbeatMs: Date.now(), state: 'ready', worldRevision: 2, probePresent: false, probeValue: -1 }));
+  const live = run(['--epoch'], dir);
+  const l = JSON.parse(live.out);
+  assert.equal(l.present, true);
+  assert.equal(l.fresh, true);
+  assert.equal(l.epoch, 9);
+});
