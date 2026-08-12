@@ -64,10 +64,30 @@ This repo doesn't ship a marketplace catalog (`.claude-plugin/marketplace.json`)
 `/plugin install` isn't an available install path — `--plugin-dir` is what works today.
 The plugin ships the skills only; the doctor/wizard still comes from the CLI door above.
 
-### Door 3: UPM — coming in v1.1
+### Door 3: Unity editor window (UPM)
 
-A Unity Package Manager door (install via `manifest.json`, no Node required) is planned for
-v1.1. It doesn't exist yet — don't add it to a `manifest.json` expecting it to resolve.
+Adds `Window > Unity Agent Kit` — the same checks, applied per-click with
+consent, no terminal touched. The package bundles the whole Node core under
+`Core~/` (one code path; the C# side contains zero check logic).
+
+**Requires Node ≥ 20 on PATH.** Decision (v1.1): the package does NOT bundle a
+Node runtime — that keeps the repo binary-free and the core zero-dependency.
+If Node is missing, the window says exactly that and links the installer;
+install Node, restart Unity (it reads PATH at launch), and run again.
+
+Install from a local clone — add to `Packages/manifest.json`:
+
+    "com.unity-agent-kit.doctor": "file:../../path-to/unity-agent-kit/upm"
+
+or straight from git:
+
+    "com.unity-agent-kit.doctor": "https://github.com/USER/unity-agent-kit.git?path=/upm"
+
+Deep bundle paths ride along (`Core~/node_modules/...`) — if your project sits near the MAX_PATH cliff, the kit's own `longpaths`/`path-headroom` checks are the fix.
+
+Headless proof (CI or dogfood):
+
+    Unity.exe -batchmode -nographics -projectPath <proj> -executeMethod UnityAgentKit.Doctor.KitDoctorBatchProof.Run -logFile proof.log
 
 ## What the doctor checks
 
@@ -86,6 +106,13 @@ suite that proves the fix, not just a re-check of the same detect logic.
 | `editor-churn` | Warns on uncommitted scene files and editor reserialization churn (`ProjectSettings/`, `Assets/Settings/`) before an agent session starts — the kit never commits for you. |
 | `blast-radius` | Installs destructive-command deny rules (`git clean`, `git reset --hard`, `rm -rf`, etc.) into `.claude/settings.json` so the commands that can nuke `.meta` files or `Library/` require explicit human approval. |
 | `unity-mcp` | Registers Unity's own free MCP server with Claude Code via `unity mcp configure claude-code` — the kit wraps the vendor's tooling instead of shipping a competing bridge. |
+| `audit` | Scans local Claude Code transcripts for Unity failure signatures; ranked triage with confidence, `file:line` links, and per-session token/retry tallies. Local-only: uploads nothing. See "Daily sweep" below. |
+| `skill-lint` | Resting token cost, "Use when" firing conditions, negative triggers, and overlap across installed skill descriptions. |
+| `orphans` | Extra Unity.exe processes, orphaned dotnet compile servers, stale `Temp/UnityLockfile`, locked git worktrees. Lists PIDs; killing anything stays a human decision. |
+
+Proof results persist to `.unity-agent-kit/verify.json` in the target repo:
+if the last real-merge proof FAILED, the doctor shows `warn` even though the
+config string looks right — green means proven, not just configured.
 
 ## What the skills teach
 
