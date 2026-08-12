@@ -63,6 +63,23 @@ test('orphans: locked git worktree admin dirs are reported', async () => {
   });
 });
 
+test('orphans: stale locks are scanned across every worktree root', async () => {
+  const rootA = mkdtempSync(join(tmpdir(), 'uak-or-'));
+  const rootB = mkdtempSync(join(tmpdir(), 'uak-or-'));
+  mkdirSync(join(rootB, 'Temp'), { recursive: true });
+  writeFileSync(join(rootB, 'Temp', 'UnityLockfile'), '');
+  const ctx = {
+    root: rootA, platform: 'win32',
+    git: () => ({ ok: true, out: `worktree ${rootA}\nHEAD abc\nbranch refs/heads/main\n\nworktree ${rootB}\nHEAD def\ndetached`, code: 0 }),
+  };
+  await withProcs([], async () => {
+    const r = await orphans.detect(ctx);
+    assert.equal(r.status, 'warn');
+    assert.match(r.evidence, /stale Temp\/UnityLockfile/);
+    assert.ok(r.evidence.includes(rootB));
+  });
+});
+
 test('orphans: tasklist CSV parser handles real output shape', () => {
   // _deps.processes is the ONLY place allowed to touch the real tasklist; here we
   // only verify it returns null or an array of {name, pid} without throwing.
