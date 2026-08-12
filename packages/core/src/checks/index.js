@@ -3,4 +3,5 @@ import './longpaths.js';
 import './worktree-ignore.js';
 import './unity-version.js';
 import './path-headroom.js';
-// later tasks append: editor-churn, blast-radius, unity-mcp
+import './editor-churn.js';
+// later tasks append: blast-radius, unity-mcp
