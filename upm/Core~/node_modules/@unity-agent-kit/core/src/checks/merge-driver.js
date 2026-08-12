@@ -61,6 +61,7 @@ register({
       const out = execFileSync('sh', [join(ASSETS, 'test-merge-driver.sh')], {
         encoding: 'utf8',
         env: { ...process.env, UAK_DRIVER: toPosix(join(ctx.root, 'tools', 'unity-yaml-merge.sh')) },
+        stdio: ['ignore', 'pipe', 'pipe'],
       });
       const pass = /PASS=5\s+FAIL=0/.test(out);
       return { ok: pass, proof: pass ? '5/5 regression cases pass (disjoint scene/prefab/meta merge clean; guid & same-field conflicts stop as valid YAML)' : out.slice(-800) };

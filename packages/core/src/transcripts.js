@@ -4,7 +4,7 @@ import { homedir } from 'node:os';
 
 // Claude Code stores transcripts at ~/.claude/projects/<sanitized>/<session>.jsonl
 // where <sanitized> is the absolute project path with every [^A-Za-z0-9] → '-'
-// (verified on this machine: C:\Users\Ryan\Kintarō → C--Users-Ryan-Kintar-).
+// (verified on this machine: C:\proj\Kintarō → C--proj-Kintar-).
 // The format is UNDOCUMENTED and may change at any time — every reader below is
 // defensive: bad lines are skipped, bad files are skipped, and callers get []
 // rather than an exception. LOCAL-ONLY: this module reads disk and uploads nothing.

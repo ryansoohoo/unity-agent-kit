@@ -156,6 +156,9 @@ Run it as a daily sweep over yesterday's sessions:
 
     node packages/cli/bin/kit.js <your-project> --only audit
 
+`UAK_TRANSCRIPTS=<dir>` overrides the transcript location — the escape hatch if
+Claude Code's (undocumented) project-folder naming ever changes.
+
 Findings are advisory: the audit never returns `fail`, never blocks CI, and has
 no `--fix` path — it tells you which guard to install, you decide.
 

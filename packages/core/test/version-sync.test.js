@@ -13,4 +13,7 @@ test('every manifest agrees with KIT_VERSION', () => {
     assert.equal(JSON.parse(readFileSync(join(REPO, p), 'utf8')).version, KIT_VERSION, p);
   }
   assert.equal(JSON.parse(readFileSync(join(REPO, 'packages/cli/package.json'), 'utf8')).dependencies['@unity-agent-kit/core'], KIT_VERSION);
+  const lock = JSON.parse(readFileSync(join(REPO, 'package-lock.json'), 'utf8'));
+  assert.equal(lock.packages['packages/cli'].version, KIT_VERSION, 'package-lock cli version');
+  assert.equal(lock.packages['packages/core'].version, KIT_VERSION, 'package-lock core version');
 });

@@ -51,7 +51,7 @@ namespace UnityAgentKit.Doctor
                 GUILayout.Label(r.title, EditorStyles.boldLabel);
                 GUILayout.Label(r.evidence, EditorStyles.wordWrappedMiniLabel);
                 EditorGUILayout.EndVertical();
-                if (r.status == "fail" && r.canApply && GUILayout.Button("Fix…", GUILayout.Width(48)))
+                if ((r.status == "fail" || r.status == "warn") && r.canApply && GUILayout.Button("Fix…", GUILayout.Width(48)))
                 {
                     toFix = r.id;
                     toFixExplain = r.explain;

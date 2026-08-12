@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -96,4 +96,18 @@ test('human output renders ranked triage findings with clickable file:line', () 
   assert.match(r.out, /s\.jsonl:1/);
   assert.match(r.out, /prevented by: blast-radius/);
   assert.match(r.out, /sessions: 1 ·/);
+});
+
+test('a warn from a failed recorded proof is repairable via --fix (not stuck)', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'uak-'));
+  execFileSync('git', ['init', '-q', dir]);
+  writeFileSync(join(dir, '.gitattributes'), '*.unity merge=unityyamlmerge\n');
+  execFileSync('git', ['-C', dir, 'config', 'merge.unityyamlmerge.driver', "sh 'C:/x/unity-yaml-merge.sh' %O %A %B %P"]);
+  mkdirSync(join(dir, '.unity-agent-kit'), { recursive: true });
+  writeFileSync(join(dir, '.unity-agent-kit', 'verify.json'), JSON.stringify({ 'merge-driver': { ok: false, at: '2026-08-12T00:00:00.000Z' } }));
+  const before = JSON.parse(run(['--json', '--only', 'merge-driver'], dir).out);
+  assert.equal(before[0].status, 'warn');
+  const fix = run(['--fix', '--yes', '--only', 'merge-driver'], dir);
+  assert.match(fix.out, /\[merge-driver\]/); // offered, no longer stuck
+  assert.equal(fix.code, 0, fix.out);
 });

@@ -24,7 +24,7 @@ if (flag('--undo')) {
 const rows = await doctor(ctx, { only: opt('--only') });
 
 if (flag('--fix')) {
-  const failing = rows.filter(r => r.status === 'fail' && getCheck(r.id).apply);
+  const failing = rows.filter(r => (r.status === 'fail' || r.status === 'warn') && getCheck(r.id).apply);
   if (!process.stdin.isTTY && !flag('--yes')) { console.error('non-interactive: use --yes'); process.exit(2); }
   const rl = flag('--yes') ? null : readline.createInterface({ input: process.stdin, output: process.stdout });
   let all = flag('--yes');
@@ -39,9 +39,13 @@ if (flag('--fix')) {
       if (a === 'y') go = true;
     }
     if (!go) { console.log('  skipped'); continue; }
-    const res = await applyOne(ctx, r.id);
-    console.log(`  applied: ${res.changed.join('; ')}`);
-    if (res.verify) console.log(`  verify: ${res.verify.ok ? 'PROVEN' : 'FAILED'} — ${res.verify.proof}`);
+    try {
+      const res = await applyOne(ctx, r.id);
+      console.log(`  applied: ${res.changed.join('; ')}`);
+      if (res.verify) console.log(`  verify: ${res.verify.ok ? 'PROVEN' : 'FAILED'} — ${res.verify.proof}`);
+    } catch (e) {
+      console.log(`  apply failed (project untouched): ${e.message}`);
+    }
   }
   rl?.close();
   const after = await doctor(ctx, { only: opt('--only') });

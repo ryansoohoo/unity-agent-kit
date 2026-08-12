@@ -6,11 +6,11 @@ import { homedir } from 'node:os';
 
 export const _deps = {
   which() {
-    try { return execFileSync(process.platform === 'win32' ? 'where' : 'which', ['unity'], { encoding: 'utf8' }).split(/\r?\n/)[0] || null; }
+    try { return execFileSync(process.platform === 'win32' ? 'where' : 'which', ['unity'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).split(/\r?\n/)[0] || null; }
     catch { return null; }
   },
   configure(cwd) {
-    try { return { ok: true, out: execFileSync('unity', ['mcp', 'configure', 'claude-code'], { cwd, encoding: 'utf8' }) }; }
+    try { return { ok: true, out: execFileSync('unity', ['mcp', 'configure', 'claude-code'], { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }) }; }
     catch (e) { return { ok: false, out: `${e.stdout ?? ''}${e.stderr ?? ''}` }; }
   },
   home() { return homedir(); },

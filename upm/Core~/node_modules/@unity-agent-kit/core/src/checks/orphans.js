@@ -7,7 +7,7 @@ import { execFileSync } from 'node:child_process';
 export const _deps = {
   processes() {
     try {
-      const out = execFileSync('tasklist', ['/FO', 'CSV', '/NH'], { encoding: 'utf8' });
+      const out = execFileSync('tasklist', ['/FO', 'CSV', '/NH'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
       return out.split(/\r?\n/)
         .map(l => l.match(/^"([^"]+)","(\d+)"/))
         .filter(Boolean)
