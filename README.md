@@ -83,6 +83,8 @@ or straight from git:
 
     "com.unity-agent-kit.doctor": "https://github.com/USER/unity-agent-kit.git?path=/upm"
 
+(The git URL works once the repo is published — until then, use the local `file:` install above.)
+
 Deep bundle paths ride along (`Core~/node_modules/...`) — if your project sits near the MAX_PATH cliff, the kit's own `longpaths`/`path-headroom` checks are the fix.
 
 Headless proof (CI or dogfood):
@@ -91,7 +93,7 @@ Headless proof (CI or dogfood):
 
 ## What the doctor checks
 
-Eight checks, each with `detect` (read-only) and `explain` (why it matters). Five of them —
+Eleven checks, each with `detect` (read-only) and `explain` (why it matters). Five of them —
 `merge-driver`, `longpaths`, `worktree-ignore`, `blast-radius`, `unity-mcp` — also have
 `apply` (consented, undoable). `merge-driver` additionally has `verify`: a 5-case regression
 suite that proves the fix, not just a re-check of the same detect logic.
