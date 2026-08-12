@@ -3,6 +3,6 @@
   "private": true,
   "type": "module",
   "workspaces": ["packages/*"],
-  "scripts": { "test": "node --test --test-concurrency=1 packages/core/test/**/*.test.js packages/cli/test/**/*.test.js", "build:plugin": "node scripts/build-plugin.mjs", "check:fresh": "node scripts/build-plugin.mjs --check" },
+  "scripts": { "pretest": "npm run check:fresh", "test": "node --test --test-concurrency=1 packages/core/test/**/*.test.js packages/cli/test/**/*.test.js", "build:plugin": "node scripts/build-plugin.mjs", "build:upm": "node scripts/build-upm.mjs", "check:fresh": "node scripts/build-plugin.mjs --check && node scripts/build-upm.mjs --check" },
   "engines": { "node": ">=20" }
 }

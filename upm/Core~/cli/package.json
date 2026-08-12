@@ -1,0 +1,5 @@
+{
+  "name": "unity-agent-kit", "version": "0.1.0", "type": "module",
+  "bin": { "unity-agent-kit": "./bin/kit.js" },
+  "dependencies": { "@unity-agent-kit/core": "0.1.0" }
+}
