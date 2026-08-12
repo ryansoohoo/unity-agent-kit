@@ -1,5 +1,5 @@
 export const STATUSES = ['pass', 'warn', 'fail', 'na'];
-const LAYERS = ['hygiene', 'workflow', 'template', 'integration'];
+const LAYERS = ['hygiene', 'workflow', 'template', 'integration', 'audit'];
 
 export function validateCheck(c) {
   if (!c || typeof c.id !== 'string' || !c.id) throw new Error('check needs id');

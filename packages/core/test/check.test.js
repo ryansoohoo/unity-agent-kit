@@ -12,3 +12,6 @@ test('rejects bad layer', () => {
   assert.throws(() => validateCheck({ ...good, layer: 'nope' }), /layer/);
 });
 test('statuses are fixed', () => { assert.deepEqual(STATUSES, ['pass', 'warn', 'fail', 'na']); });
+test('validateCheck accepts the audit layer', () => {
+  validateCheck({ id: 'x', layer: 'audit', title: 't', detect: () => {}, explain: () => '' });
+});

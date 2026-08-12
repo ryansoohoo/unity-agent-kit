@@ -6,3 +6,4 @@ import './path-headroom.js';
 import './editor-churn.js';
 import './blast-radius.js';
 import './unity-mcp.js';
+import './audit.js';
