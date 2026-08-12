@@ -18,6 +18,8 @@ test('readSessions parses JSONL, skips junk lines, never throws', () => {
     'NOT JSON AT ALL {{{',
     JSON.stringify({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: '1', content: [{ type: 'text', text: 'hi' }] }] } }),
     '"a bare string is not an entry"',
+    '[1,2,3]',
+    'null',
     JSON.stringify({ type: 'queue-operation', operation: 'enqueue' }),
   ].join('\n'));
   writeFileSync(join(dir, 'empty.jsonl'), '\n\n');
@@ -28,6 +30,9 @@ test('readSessions parses JSONL, skips junk lines, never throws', () => {
   assert.deepEqual(toolUses(sessions[0]), [{ line: 1, name: 'Bash', input: { command: 'echo hi' } }]);
   assert.deepEqual(toolResults(sessions[0]), [{ line: 3, text: 'hi' }]);
   assert.deepEqual(usageTotals(sessions[0]), { input: 7, output: 3 });
+  assert.deepEqual(toolUses(undefined), []);
+  assert.deepEqual(toolResults(undefined), []);
+  assert.deepEqual(usageTotals(undefined), { input: 0, output: 0 });
 });
 
 test('readSessions on a missing dir returns []', () => {

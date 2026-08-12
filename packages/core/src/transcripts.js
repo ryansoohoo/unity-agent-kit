@@ -14,7 +14,7 @@ export function transcriptDirFor(projectRoot, home = homedir()) {
 }
 
 export function readSessions(dir) {
-  if (!dir || !existsSync(dir)) return [];
+  if (!dir || typeof dir !== 'string' || !existsSync(dir)) return [];
   let files;
   try { files = readdirSync(dir).filter(f => f.endsWith('.jsonl')); }
   catch { return []; }
@@ -40,7 +40,7 @@ export function readSessions(dir) {
 
 export function toolUses(session) {
   const out = [];
-  for (const { line, e } of session.entries) {
+  for (const { line, e } of session?.entries ?? []) {
     if (e.type !== 'assistant') continue;
     const content = e.message?.content;
     if (!Array.isArray(content)) continue;
@@ -53,7 +53,7 @@ export function toolUses(session) {
 
 export function toolResults(session) {
   const out = [];
-  for (const { line, e } of session.entries) {
+  for (const { line, e } of session?.entries ?? []) {
     if (e.type !== 'user') continue;
     const content = e.message?.content;
     if (!Array.isArray(content)) continue;
@@ -70,7 +70,7 @@ export function toolResults(session) {
 
 export function usageTotals(session) {
   let input = 0, output = 0;
-  for (const { e } of session.entries) {
+  for (const { e } of session?.entries ?? []) {
     const u = e?.message?.usage;
     if (e.type === 'assistant' && u) {
       input += Number(u.input_tokens) || 0;
