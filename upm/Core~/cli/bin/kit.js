@@ -10,6 +10,16 @@ import readline from 'node:readline/promises';
 const args = process.argv.slice(2);
 const flag = (f) => args.includes(f);
 const opt = (f) => { const i = args.indexOf(f); return i >= 0 ? args[i + 1] : undefined; };
+// Numeric options are validated at the door: a typo'd value (`--timeout-ms /path`)
+// would otherwise reach the poller as NaN, where every bound comparison is false
+// forever — a bounded wait silently becoming an endless one.
+const num = (f, dflt) => {
+  const v = opt(f);
+  if (v === undefined) return dflt;
+  const n = Number(v);
+  if (!Number.isFinite(n)) { console.error(`${f} needs a number (got: ${v})`); process.exit(2); }
+  return n;
+};
 const OPT_FLAGS = ['--only', '--since-epoch', '--timeout-ms', '--poll-ms'];
 const root = args.find((a, i) => !a.startsWith('--') && !OPT_FLAGS.includes(args[i - 1])) ?? process.cwd();
 
@@ -31,10 +41,10 @@ if (flag('--epoch')) {
 
 if (flag('--wait-ready')) {
   const r = await waitReady(ctx.root, {
-    sinceEpoch: opt('--since-epoch') !== undefined ? Number(opt('--since-epoch')) : -1,
+    sinceEpoch: num('--since-epoch', -1),
     requireEpochBump: opt('--since-epoch') !== undefined,
-    timeoutMs: opt('--timeout-ms') !== undefined ? Number(opt('--timeout-ms')) : 120000,
-    pollMs: opt('--poll-ms') !== undefined ? Number(opt('--poll-ms')) : 250,
+    timeoutMs: num('--timeout-ms', 120000),
+    pollMs: num('--poll-ms', 250),
   });
   console.log(JSON.stringify(r, null, 2));
   process.exit(r.ok ? 0 : 1);

@@ -143,3 +143,18 @@ test('--wait-ready: ok on a fresh ready signal, no-editor exit 1 when absent', (
   assert.equal(hit.code, 0);
   assert.equal(JSON.parse(hit.out).epoch, 3);
 });
+
+// A typo'd option value (here: the project path where a number belongs) used to
+// reach waitReady as NaN — and NaN >= timeoutMs is false forever, so the bounded
+// wait became a permanent hot poll loop. The exec timeout below is load-bearing:
+// it is what stops a regression from hanging the whole suite instead of failing.
+test('--wait-ready: a non-numeric option value exits 2 instead of waiting forever', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'uak-'));
+  execFileSync('git', ['init', '-q', dir]);
+  const r = (() => {
+    try { return { code: 0, out: execFileSync(process.execPath, [BIN, '--wait-ready', '--timeout-ms', dir], { cwd: dir, encoding: 'utf8', timeout: 5000 }) }; }
+    catch (e) { return { code: e.status, out: `${e.stdout ?? ''}${e.stderr ?? ''}` }; }
+  })();
+  assert.equal(r.code, 2, r.out);
+  assert.match(r.out, /--timeout-ms/);
+});
