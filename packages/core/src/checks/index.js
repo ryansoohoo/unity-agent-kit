@@ -1,4 +1,6 @@
 import './merge-driver.js';
 import './longpaths.js';
 import './worktree-ignore.js';
-// later tasks append: unity-version, path-headroom, editor-churn, blast-radius, unity-mcp
+import './unity-version.js';
+import './path-headroom.js';
+// later tasks append: editor-churn, blast-radius, unity-mcp
