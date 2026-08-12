@@ -5,4 +5,4 @@ import './unity-version.js';
 import './path-headroom.js';
 import './editor-churn.js';
 import './blast-radius.js';
-// later tasks append: unity-mcp
+import './unity-mcp.js';
