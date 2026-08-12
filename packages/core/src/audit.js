@@ -17,6 +17,11 @@ export function recordApply(ctx, entry) {
   writeFileSync(auditPath(ctx), JSON.stringify(data, null, 2) + '\n');
 }
 
+// NOTE: undoAll is NOT atomic — it replays undo ops newest-first and rewrites the
+// audit file only after the loop. A mid-loop throw leaves earlier entries undone
+// on disk but still listed in applied.json; re-running --undo after fixing the
+// cause is safe (git-config-unset tolerates exit 5 / already-unset; restore-file
+// rewrites the same previous content).
 export function undoAll(ctx) {
   const data = loadAudit(ctx);
   const undone = [];

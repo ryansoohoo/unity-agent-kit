@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 const SNIPPET = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'assets', 'gitignore-worktrees.txt'), 'utf8');
 
-const IGNORED_RE = /^\/?\.claude\/worktrees\/$/m;
+const IGNORED_RE = /^\/?\.claude\/worktrees\/\r?$/m;
 
 register({
   id: 'worktree-ignore', layer: 'hygiene', title: '.claude/worktrees/ gitignored',

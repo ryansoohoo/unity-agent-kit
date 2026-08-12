@@ -33,6 +33,9 @@ register({
     }
     return { status: 'fail', evidence: 'Unity CLI installed but its MCP is not registered in this project' };
   },
+  // Undo is BEST-EFFORT: `unity mcp configure` is a vendor command and may write
+  // outside .mcp.json (global config, registries). We snapshot and restore only
+  // .mcp.json — the one file we can prove it touches here.
   apply: async (ctx) => {
     const p = join(ctx.root, '.mcp.json');
     const prev = existsSync(p) ? readFileSync(p, 'utf8') : null;

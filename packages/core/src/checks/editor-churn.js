@@ -14,7 +14,7 @@ register({
   detect: async (ctx) => {
     const st = ctx.git('-c', 'core.quotepath=false', 'status', '--porcelain');
     if (!st.ok) return { status: 'na', evidence: 'not a git repo' };
-    const lines = st.out ? st.out.split('\n') : [];
+    const lines = st.out ? st.out.split(/\r?\n/) : [];
     const paths = lines.map(l => l.slice(3).replace(/^"|"$/g, ''));
     const scenes = paths.filter(p => SCENE_RE.test(p));
     const churn = paths.filter(p => CHURN_RE.test(p));
