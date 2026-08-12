@@ -23,6 +23,7 @@ test('treesEqual: equal trees, content drift, extra files', () => {
   writeFileSync(join(b, 'extra.md'), 'x');
   assert.ok(!treesEqual(a, b));
   assert.ok(!treesEqual(a, join(tmpdir(), 'uak-missing-xyz')));
+  assert.ok(!treesEqual(join(tmpdir(), 'uak-missing-1'), join(tmpdir(), 'uak-missing-2')), 'two missing trees are not vacuously equal');
 });
 
 test('build-plugin --check passes on a fresh repo', () => {

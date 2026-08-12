@@ -14,6 +14,7 @@ export function listFiles(root, filter = () => true, base = root) {
 }
 
 export function treesEqual(a, b, filter = () => true) {
+  if (!existsSync(a) || !existsSync(b)) return false;
   const fa = listFiles(a, filter);
   const fb = listFiles(b, filter);
   if (fa.length !== fb.length || fa.some((f, i) => f !== fb[i])) return false;

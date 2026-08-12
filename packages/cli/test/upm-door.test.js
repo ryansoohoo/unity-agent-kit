@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, readFileSync, existsSync, cpSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -18,15 +18,17 @@ test('upm manifest is a valid editor-only Unity 6 package', () => {
   assert.equal(asmdef.name, 'UnityAgentKit.Doctor.Editor');
 });
 
-test('bundled Core~ runs the doctor end-to-end from inside upm/ (one code path)', () => {
-  execFileSync(process.execPath, [join(REPO, 'scripts', 'build-upm.mjs')], { cwd: REPO });
-  assert.ok(existsSync(join(REPO, 'upm', 'Core~', 'cli', 'bin', 'kit.js')));
+test('bundled Core~ runs the doctor end-to-end from OUTSIDE the repo (one code path, hermetic)', () => {
+  const corePkg = join(REPO, 'upm', 'Core~', 'node_modules', '@unity-agent-kit', 'core', 'package.json');
+  assert.ok(existsSync(corePkg), 'bundled engine is committed');
   assert.ok(!existsSync(join(REPO, 'upm', 'Core~', 'cli', 'test')), 'test dirs are excluded from the bundle');
-  const dir = mkdtempSync(join(tmpdir(), 'uak-'));
-  execFileSync('git', ['init', '-q', dir]);
+  const stage = mkdtempSync(join(tmpdir(), 'uak-upm-'));
+  cpSync(join(REPO, 'upm', 'Core~'), join(stage, 'Core~'), { recursive: true });
+  const proj = mkdtempSync(join(tmpdir(), 'uak-'));
+  execFileSync('git', ['init', '-q', proj]);
   let out;
-  try { out = execFileSync(process.execPath, [join(REPO, 'upm', 'Core~', 'cli', 'bin', 'kit.js'), dir, '--json'], { encoding: 'utf8' }); }
-  catch (e) { out = e.stdout; } // exit 1 = fails present, still a report
+  try { out = execFileSync(process.execPath, [join(stage, 'Core~', 'cli', 'bin', 'kit.js'), proj, '--json'], { encoding: 'utf8' }); }
+  catch (e) { out = e.stdout; }
   const rows = JSON.parse(out);
   assert.ok(rows.some(r => r.id === 'merge-driver'));
   assert.ok(rows.every(r => typeof r.canApply === 'boolean'));
