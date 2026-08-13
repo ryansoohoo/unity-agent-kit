@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseSkillInvocations, scoreRuns } from '../../../scripts/skill-evals.mjs';
+import { parseSkillInvocations, scoreRuns, verdictFor } from '../../../scripts/skill-evals.mjs';
 
 const LINE = (name) => JSON.stringify({
   type: 'assistant',
@@ -8,7 +8,13 @@ const LINE = (name) => JSON.stringify({
 });
 
 test('parser: extracts Skill invocations from stream-json lines, ignores noise', () => {
-  const out = ['{"type":"system","subtype":"init"}', LINE('unity-verify'), 'not json at all', '{"type":"result","result":"done"}'].join('\n');
+  const out = [
+    '{"type":"system","subtype":"init"}',
+    LINE('unity-verify'),
+    'not json at all',
+    '{"type":"assistant","message":{"content":{"type":"tool_use","name":"Skill"}}}', // content not an array: another shape, not iterable
+    '{"type":"result","result":"done"}',
+  ].join('\n');
   assert.deepEqual(parseSkillInvocations(out), ['unity-verify']);
 });
 
@@ -27,4 +33,13 @@ test('scoring: exact-match verdicts and cross-fire accounting', () => {
   assert.equal(s.perSkill['unity-verify'].hit, 1);
   assert.equal(s.perSkill['unity-verify'].miss, 1);
   assert.equal(s.crossFires.length, 1);
+});
+
+// A failed CLI call is not a skill declining to fire: an expired token mid-run
+// must read as indeterminate, never as a run of misses.
+test('verdict: a non-zero exit or a failed spawn is indeterminate, not a miss', () => {
+  assert.equal(verdictFor({ status: 0 }), null);
+  assert.equal(verdictFor({ status: 1 }), 'indeterminate');  // expired auth, usage limit, bad --model
+  assert.equal(verdictFor({ status: null }), 'indeterminate'); // timeout
+  assert.equal(verdictFor({ error: new Error('ENOENT'), status: null }), 'indeterminate');
 });

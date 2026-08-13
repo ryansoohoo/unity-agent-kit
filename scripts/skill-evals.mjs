@@ -8,12 +8,15 @@ import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, readdirSync, exist
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { pathToFileURL } from 'node:url';
 
 export function parseSkillInvocations(stdoutText) {
   const fired = [];
   for (const line of stdoutText.split(/\r?\n/)) {
     let j; try { j = JSON.parse(line); } catch { continue; }
-    for (const block of j?.message?.content ?? []) {
+    const content = j?.message?.content;
+    if (!Array.isArray(content)) continue; // a non-array content is another message shape, not zero skills
+    for (const block of content) {
       if (block?.type === 'tool_use' && block?.name === 'Skill' && block?.input?.skill) fired.push(block.input.skill);
     }
   }
@@ -37,7 +40,19 @@ export function scoreRuns(records) {
   return { perSkill, crossFires, indeterminate };
 }
 
-function arg(name, dflt) { const i = process.argv.indexOf(name); return i > -1 ? process.argv[i + 1] : dflt; }
+// A non-zero exit is a failed CLI call (expired auth, usage limit, rate limit,
+// bad --model), not a skill declining to fire. Scoring it as a miss would read
+// as trigger collapse with indeterminate: 0.
+export function verdictFor(res) { return (res.error || res.status !== 0) ? 'indeterminate' : null; }
+
+function arg(name, dflt) {
+  const i = process.argv.indexOf(name);
+  if (i < 0) return dflt;
+  const v = process.argv[i + 1];
+  // A flag left without a value dies here, not 300 calls later at the write.
+  if (v === undefined || v.startsWith('--')) die(`${name} needs a value`);
+  return v;
+}
 
 function die(msg) { console.error(`indeterminate: ${msg}`); process.exit(2); }
 
@@ -45,6 +60,10 @@ function die(msg) { console.error(`indeterminate: ${msg}`); process.exit(2); }
 // quotes doubled: bare `NON-NEGOTIABLE: …` class strings break the document,
 // and skill-lint's regex would still "see" a description Claude Code cannot.
 const yamlSingleQuoted = (s) => `'${s.replace(/'/g, "''")}'`;
+// Write-side inverse, kept local on purpose: skill-lint.js registers a check into
+// the global registry at import, and the parser unit test should not drag that in
+// for a string helper. Its unquoteScalar is the canonical reader (it also handles
+// double quotes); this one only has to undo the line above.
 const yamlUnquote = (raw) => (raw.startsWith("'") && raw.endsWith("'") ? raw.slice(1, -1).replace(/''/g, "'") : raw);
 const frontmatterDesc = (md) => md.match(/^---\r?\n([\s\S]*?)\r?\n---/)?.[1]?.match(/^description:\s*(.+?)\s*$/m)?.[1];
 
@@ -84,9 +103,14 @@ async function main() {
   const skills = (arg('--skills', '') || allSkills.join(',')).split(',').filter(Boolean);
   const model = arg('--model', null); const variant = arg('--variant', null);
   const runs = Number(arg('--runs', '3'));
+  // Every flag is resolved BEFORE the CLI probe: `--out` parsed lazily at the
+  // write would only reject a missing value after the whole run had been spent.
+  const out = arg('--out', join('.superpowers', `skill-evals-${variant ?? 'baseline'}.json`));
   const unknown = skills.filter(s => !allSkills.includes(s));
   if (unknown.length) die(`unknown --skills: ${unknown.join(',')} (have: ${allSkills.join(',')})`);
   if (!Number.isInteger(runs) || runs < 1) die(`--runs must be a positive integer, got "${arg('--runs', '3')}"`);
+  // --model reaches a shell command line (shell:true is needed for claude.cmd).
+  if (model !== null && !/^[\w.:@-]+$/.test(model)) die(`--model has characters outside [A-Za-z0-9._:@-], got "${model}"`);
   const probe = spawnSync('claude', ['--version'], { encoding: 'utf8', shell: true });
   if (probe.status !== 0) die('claude CLI unavailable');
   const proj = buildTempProject(allSkills, variant); // coexistence: ALL skills always installed
@@ -99,28 +123,40 @@ async function main() {
     const lint = await getCheck('skill-lint').detect(createContext(proj));
     if (lint.status !== 'pass') { rmSync(proj, { recursive: true, force: true }); die(`variant '${variant}' fails skill-lint (${lint.status}) — ${lint.evidence}`); }
   }
-  const records = [];
-  for (const skill of skills) {
-    const set = JSON.parse(readFileSync(join('skills', skill, 'evals.json'), 'utf8'));
-    for (const q of set.queries) for (let r = 0; r < runs; r++) {
-      const args = ['-p', '--output-format', 'stream-json', '--verbose', '--max-turns', '3', '--allowedTools', 'Skill'];
-      if (model) args.push('--model', model);
-      const res = spawnSync('claude', args, { cwd: proj, input: q.query, encoding: 'utf8', shell: true, timeout: 120000 });
-      const verdict = (res.error || res.status === null) ? 'indeterminate' : null;
-      records.push({ skill, query: q.query, expect: q.expect, fired: verdict ? [] : parseSkillInvocations(res.stdout ?? ''), verdict });
-      console.log(`${skill} | ${verdict ?? 'ok'} | expect=${q.expect} fired=${records.at(-1).fired.join('+') || '-'} | ${q.query.slice(0, 50)}`);
+  const records = []; const startedAt = new Date().toISOString();
+  let partial = true; let score = null;
+  try {
+    for (const skill of skills) {
+      const set = JSON.parse(readFileSync(join('skills', skill, 'evals.json'), 'utf8'));
+      for (const q of set.queries) for (let r = 0; r < runs; r++) {
+        const args = ['-p', '--output-format', 'stream-json', '--verbose', '--max-turns', '3', '--allowedTools', 'Skill'];
+        if (model) args.push('--model', model);
+        const res = spawnSync('claude', args, { cwd: proj, input: q.query, encoding: 'utf8', shell: true, timeout: 120000 });
+        const verdict = verdictFor(res);
+        records.push({ skill, query: q.query, expect: q.expect, fired: verdict ? [] : parseSkillInvocations(res.stdout ?? ''), verdict, status: res.status ?? null, stderr: (res.stderr ?? '').slice(-200) });
+        console.log(`${skill} | ${verdict ?? 'ok'} | expect=${q.expect} fired=${records.at(-1).fired.join('+') || '-'} | ${q.query.slice(0, 50)}`);
+      }
     }
+    partial = false;
+  } catch (e) {
+    console.error(`indeterminate: run aborted after ${records.length} record(s) — ${e.message}`);
+  } finally {
+    // Whatever happened, the tokens are already spent: land the records and take
+    // the temp project down with us.
+    rmSync(proj, { recursive: true, force: true });
+    score = scoreRuns(records);
+    mkdirSync(dirname(out), { recursive: true }); // a 300-call run must not die on a missing --out dir
+    writeFileSync(out, JSON.stringify({ meta: { model, runs, variant, startedAt, partial }, records, score }, null, 2));
+    console.log(JSON.stringify(score.perSkill, null, 2));
+    // Absolute results path: the run is scratch, the file is what gets copied.
+    console.log(`cross-fires: ${score.crossFires.length}, indeterminate: ${score.indeterminate}, results: ${resolve(out)}`);
   }
-  const score = scoreRuns(records);
-  const out = arg('--out', join('.superpowers', `skill-evals-${variant ?? 'baseline'}.json`));
-  mkdirSync(dirname(out), { recursive: true }); // a 300-call run must not die on a missing --out dir
-  writeFileSync(out, JSON.stringify({ meta: { model, runs, variant, startedAt: new Date().toISOString() }, records, score }, null, 2));
-  console.log(JSON.stringify(score.perSkill, null, 2));
-  // Absolute results path: the run is scratch, the file is what gets copied.
-  console.log(`cross-fires: ${score.crossFires.length}, indeterminate: ${score.indeterminate}, results: ${resolve(out)}`);
-  rmSync(proj, { recursive: true, force: true });
+  if (partial) process.exit(2);
+  if (!records.length) die('no records — nothing was measured');
   if (score.indeterminate) process.exit(2);
   const ok = Object.values(score.perSkill).every(b => b.hit / (b.hit + b.miss) >= 0.9) && score.crossFires.length === 0;
   process.exit(ok ? 0 : 1);
 }
-if (import.meta.url === `file://${process.argv[1]}` || process.argv[1]?.endsWith('skill-evals.mjs')) await main();
+// Exact URL match, not a basename test: a sibling driver that imports scoreRuns
+// must never launch a 300-call run just by being named skill-evals-something.
+if (import.meta.url === (process.argv[1] && pathToFileURL(process.argv[1]).href)) await main();
