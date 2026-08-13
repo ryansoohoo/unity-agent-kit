@@ -27,7 +27,7 @@ Explicitly settled by research: **five skills is not too many** (degradation sta
 ### W2 — Description hardening
 
 - **Polysemy disambiguators now:** `unity-verify` description gains "(compile/typecheck — NOT player/exe builds)" or equivalent; any other polysemous term surfaced by W4's vocabulary table gets the same treatment. Player-build coverage itself is out of scope (backlog: unclaimed territory).
-- **Directive variants drafted for all five** descriptions (form: "ALWAYS invoke when … Do not ⟨alternative⟩ directly"), stored as variants alongside the eval sets — **adopted only if W5 scores a variant higher on the held-out split** (E3: the gate prevents overfitting, not caution). Until measured, shipped descriptions stay as-is apart from the polysemy disambiguators.
+- **Directive variants drafted for all five** descriptions (form: "ALWAYS invoke when … Do not ⟨alternative⟩ directly"), stored as variants alongside the eval sets. W2 only drafts; nothing ships here beyond the polysemy disambiguators — the improvement and adoption happen in W6, gated on held-out data (E3: the gate prevents overfitting, not caution).
 - All five skills are in scope including `unity-claude-md` (its concurrent-session wave landed as `da864a3`).
 
 ### W3 — Eval sets (per skill)
@@ -56,8 +56,17 @@ Evidence strings name file:line for every finding, matching the kit's style. ski
   - Scoring: exact match on which skill fired; false-positive counts per sibling; a 5×N coexistence matrix (B1: run with ALL skills installed, always). Repetitions: 3 per query (D3). Output: JSON + console table; exit 0 only when all repetitions are determinate, every skill's should-trigger rate is ≥ 90%, and there are zero cross-fires (a should-not query firing any kit skill, or a should query firing the wrong sibling — any cross-fire fails the run).
   - Flags: `--skills <subset>`, `--model <id>` (default: the session's configured default), `--variant <name>`, `--runs N`.
   - **Never wired into CI** (needs auth + spends tokens); documented in the README's contributor section with expected cost per full run (~300 calls).
-- **Measurement protocol:** (1) baseline the current descriptions; (2) evaluate the W2 directive variants; (3) adopt per-skill whichever form wins on the held-out 40% split (60/40 split by query, D3); (4) record both matrices and the decision in BUILD-LEDGER.
+- **Measurement protocol:** W5 delivers the harness plus the baseline matrix on current descriptions; the improvement loop and adoption decisions are W6's job.
 - Harness smoke test (unit): the output parser against canned `claude -p` JSON fixtures — no live-model calls in the suite.
+
+### W6 — Description improvement pass (final)
+
+The wave's closing act, run only after W1–W5 have landed (their outputs are its inputs):
+
+1. For each skill, gather: its baseline eval failures (W5), the W2 directive variant's scores, the W4 vocabulary table (keyword coverage + polysemy hits), and cross-skill terminology consistency (research E8).
+2. Run an improvement loop in skill-creator's shape (research D3): propose description edits from the specific failures — form, missing user-vocabulary keywords, sharper negative triggers, disambiguators — re-score on the 60/40 train/held-out split, at most 5 iterations per skill, adopt strictly by held-out score (never train score).
+3. Final full-set coexistence run with all five adopted descriptions to confirm no sibling regressed (research B2) — a green solo matrix with a red full-set matrix reverts the offending adoption.
+4. Land the final descriptions (skills/ + rebuilt plugin copies in the same commit) with before/after trigger matrices recorded in BUILD-LEDGER.
 
 ## Error handling
 
@@ -89,5 +98,5 @@ Evidence strings name file:line for every finding, matching the kit's style. ski
 - skill-lint extended with the four sub-checks, unit-tested, kit's own skills pass (after W1/W2 fixes).
 - Five eval sets exist meeting count + authorship-diversity rules; polysemous negatives present.
 - Harness runs end-to-end on this machine; baseline coexistence matrix recorded in BUILD-LEDGER.
-- Description decision (keep vs directive) made per skill from held-out data and recorded.
+- W6 improvement loop run for all five skills; final descriptions adopted by held-out score with a clean full-set coexistence confirmation; before/after matrices in BUILD-LEDGER.
 - Suite green twice locally; CI green on push; plugin rebuilt in the same commits that touch skills/.
