@@ -212,6 +212,18 @@ The regression suite ships in this repo (`packages/core/test/merge-driver.test.j
 `packages/core/assets/test-merge-driver.sh`) and runs as part of `npm test`. The design and
 research docs behind these claims live in the Kintarō repo's `docs/research/`.
 
+## Development
+
+### Skill trigger evals (maintainers)
+
+`node scripts/skill-evals.mjs` measures which skill fires for ~100 realistic
+queries (all five skills installed — coexistence, not isolation). Needs a
+logged-in `claude` CLI and spends real tokens (~300 headless calls per full
+run at `--runs 3`); never wire it into CI. `--skills`, `--model`, `--runs`,
+and `--variant <name>` (description variants from `evals-variants.json`)
+subset a run. While here, spot-check `/context` in a real session to confirm
+all five descriptions survive Claude Code's cumulative description budget.
+
 ## License
 
 MIT — see `LICENSE` and `NOTICE`.
