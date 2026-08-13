@@ -78,7 +78,8 @@ function vocabFlags(skills) {
 
 // Environment contracts rot silently (research E1): machine-measured numbers
 // must say so on the line; CLI flags must be kit-owned or adjudicated vendor
-// tokens (re-verify vendor tokens against the Unity CLI on editor upgrades).
+// tokens. Vendor tokens belong to different tools (Unity, git, …) — re-verify
+// each against ITS owning tool when that tool is upgraded.
 const CONTRACT_ALLOW = new Set([
   '--wait-ready', '--since-epoch', '--timeout-ms', '--poll-ms', '--epoch',
   '--only', '--fix', '--undo', '--json',            // kit-owned (version-locked to this repo)
@@ -89,8 +90,9 @@ function contractFlags(skills) {
   const flags = [];
   for (const s of skills) {
     for (const line of (s.body ?? '').split(/\r?\n/)) {
-      if (/\bmeasured\b/i.test(line)) continue;
-      const num = line.match(/~?\d+(?:\.\d+)?\s*(?:ms|s|GB|MB)\b/);
+      // "measured" exempts the NUMBER on its line and nothing else: skipping the
+      // whole line would let any flag ride past the scan behind the word.
+      const num = /\bmeasured\b/i.test(line) ? null : line.match(/~?\d+(?:\.\d+)?\s*(?:ms|s|GB|MB)\b/);
       if (num) flags.push(`${s.name}: unannotated measurement "${num[0].trim()}" — add "measured" to the line or remove the number`);
       for (const f of line.match(/--[a-z][\w-]+/g) ?? []) {
         if (!CONTRACT_ALLOW.has(f)) flags.push(`${s.name}: unallowlisted flag "${f}" — kit flag? add to CONTRACT_ALLOW; vendor? adjudicate + comment`);
@@ -166,7 +168,7 @@ register({
     }
     flags.push(...paraDupes(skills)); // bodies dedup across ALL skills: a description-less one is the least linted
     flags.push(...vocabFlags(withDesc));
-    flags.push(...contractFlags(withDesc), ...formFlags(withDesc));
+    flags.push(...contractFlags(skills), ...formFlags(withDesc)); // contracts are a body check; form needs a desc
     const tokens = withDesc.reduce((n, s) => n + Math.ceil(s.desc.length / 4), 0);
     if (tokens > 500) flags.push(`resting cost ~${tokens} tokens across ${skills.length} descriptions (>500 budget)`);
     return flags.length

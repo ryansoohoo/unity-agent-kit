@@ -119,7 +119,7 @@ suite that proves the fix, not just a re-check of the same detect logic.
 | `blast-radius` | Installs destructive-command deny rules (`git clean`, `git reset --hard`, `rm -rf`, etc.) into `.claude/settings.json` so the commands that can nuke `.meta` files or `Library/` require explicit human approval. |
 | `unity-mcp` | Registers Unity's own free MCP server with Claude Code via `unity mcp configure claude-code` — the kit wraps the vendor's tooling instead of shipping a competing bridge. |
 | `audit` | Scans local Claude Code transcripts for Unity failure signatures; ranked triage with confidence, `file:line` links, and per-session token/retry tallies. Local-only: uploads nothing. See "Daily sweep" below. |
-| `skill-lint` | Resting token cost, "Use when" firing conditions, negative triggers, and overlap across installed skill descriptions. |
+| `skill-lint` | Four dimensions across installed skills: description form (resting token cost, "Use when" firing conditions, negative triggers, overlap between two skills), near-duplicate paragraphs shared between two bodies, vocabulary discipline (one content term claimed by two skills, polysemous terms with no disambiguator), and environment contracts (machine numbers not marked "measured", CLI flags outside the adjudicated allowlist). |
 | `orphans` | Extra Unity.exe processes, orphaned dotnet compile servers, stale `Temp/UnityLockfile`, locked git worktrees. Lists PIDs; killing anything stays a human decision. |
 | `kanabo` | The v2 reload-boundary signal as a doctor row: reports the live epoch/state from `Temp/unity-agent-kit/epoch.json` when the editor is running the kit's UPM package. Detect-only, `pass`/`na` — an idle or absent editor is a state, not a defect. |
 

@@ -178,25 +178,43 @@ test('skill-lint: first-person POV and body when-to-use headings are form findin
   assert.match(r.evidence, /pov: "When to use" belongs in the description/);
 });
 
+// "measured" annotates the NUMBER on its line. If it skipped the whole line it
+// would be a check-evasion path: write the word, smuggle any flag past the scan.
+test('skill-lint: a "measured" line still has its flags scanned', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'uak-sl-'));
+  skillDirB(root, 'evade', 'Use when doing C-work in editors. Do NOT use for D-work.',
+    '# e\n\nCold init costs ~103 s (measured with `kit --frobnicate`).');
+  const r = await lint.detect(createContext(root));
+  assert.equal(r.status, 'warn');
+  assert.match(r.evidence, /evade: unallowlisted flag "--frobnicate"/);
+  assert.doesNotMatch(r.evidence, /unannotated measurement/); // the number stays exempt
+});
+
 // A description-less skill is the least-linted kind there is (every
-// description sub-check skips it), so the body-level dedup must still see it.
-test('skill-lint: a description-less skill still participates in paragraph dedup', async () => {
+// description sub-check skips it), so the body-level checks must still see it.
+test('skill-lint: a description-less skill is still linted for duplication and contracts', async () => {
   const root = mkdtempSync(join(tmpdir(), 'uak-sl-'));
   skillDirB(root, 'has-desc', 'Use when doing A-work in editors. Do NOT use for B-work.', `# a\n\n${LONG_PARA}`);
-  skillDirB(root, 'no-desc', null, `# b\n\n${LONG_PARA}`);
+  skillDirB(root, 'no-desc', null, `# b\n\n${LONG_PARA}\n\nRun the tool with --frobnicate to begin.`);
   const r = await lint.detect(createContext(root));
   assert.equal(r.status, 'warn');
   assert.match(r.evidence, /has-desc and no-desc: near-duplicate paragraph/);
+  assert.match(r.evidence, /no-desc: unallowlisted flag "--frobnicate"/);
 });
 
-// "execute" contains "exe" but says nothing about player builds, so it must
-// not silence the disambiguator demand.
-test('skill-lint: "execute" does not satisfy the build disambiguator', async () => {
+// The disambiguator is the word "exe", not the letters: "execute" must not
+// satisfy it, a standalone "exe" must.
+test('skill-lint: the build disambiguator matches "exe" but not "execute"', async () => {
   const root = mkdtempSync(join(tmpdir(), 'uak-sl-'));
   skillDir(root, 'exec', 'Use when you execute build steps in Unity projects. Do NOT use for merges.');
   const r = await lint.detect(createContext(root));
   assert.equal(r.status, 'warn');
   assert.match(r.evidence, /exec: "build" is polysemous/);
+
+  const root2 = mkdtempSync(join(tmpdir(), 'uak-sl-'));
+  skillDir(root2, 'exe-ok', 'Use when producing a standalone exe build for QA. Do NOT use for merges.');
+  const r2 = await lint.detect(createContext(root2));
+  assert.equal(r2.status, 'pass', r2.evidence);
 });
 
 // The polyseme is the compile-adjacent word and its re-/pre- forms; "buildings"
