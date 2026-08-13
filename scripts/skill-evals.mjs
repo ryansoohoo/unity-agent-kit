@@ -113,8 +113,10 @@ async function main() {
   if (model !== null && !/^[\w.:@-]+$/.test(model)) die(`--model has characters outside [A-Za-z0-9._:@-], got "${model}"`);
   // Prove the results are writable now: discovering it at the end throws on the
   // rescue path, which reads as exit 1 "thresholds missed" with the records lost.
-  try { mkdirSync(dirname(out), { recursive: true }); }
-  catch (e) { die(`--out directory is not creatable: ${dirname(out)} — ${e.message}`); }
+  // A creatable directory is not enough — `--out <an existing dir>` EISDIRs at
+  // the write — so touch the file itself.
+  try { mkdirSync(dirname(out), { recursive: true }); writeFileSync(out, ''); }
+  catch (e) { die(`--out is not writable: ${out} — ${e.message}`); }
   const probe = spawnSync('claude', ['--version'], { encoding: 'utf8', shell: true });
   if (probe.status !== 0) die('claude CLI unavailable');
   // Provenance: which CLI produced these numbers. A results file from a stubbed
@@ -131,24 +133,37 @@ async function main() {
     if (lint.status !== 'pass') { rmSync(proj, { recursive: true, force: true }); die(`variant '${variant}' fails skill-lint (${lint.status}) — ${lint.evidence}`); }
   }
   const records = []; const startedAt = new Date().toISOString();
-  let partial = true; let score = null;
+  let partial = true; let score = null; let done = false;
   // One way out for all three exits (finished, threw, interrupted). The records
   // are the expensive artifact, so they land BEFORE the temp dir is touched:
   // removing it can EPERM on Windows just after a child exits, and a throw
   // there would take a completed run's results with it.
   const finish = (isPartial) => {
+    if (done) return; // a SIGINT landing after a complete run must not rewrite the file as partial
+    done = true;
     score = scoreRuns(records);
     writeFileSync(out, JSON.stringify({ meta: { model, runs, variant, startedAt, claudeVersion, partial: isPartial }, records, score }, null, 2));
     console.log(JSON.stringify(score.perSkill, null, 2));
     // Absolute results path: the run is scratch, the file is what gets copied.
     console.log(`cross-fires: ${score.crossFires.length}, indeterminate: ${score.indeterminate}, results: ${resolve(out)}`);
-    try { rmSync(proj, { recursive: true, force: true, maxRetries: 3 }); } catch { /* temp dir: the OS reaps it */ }
+    try { rmSync(proj, { recursive: true, force: true, maxRetries: 3 }); }
+    catch (e) { console.error(`note: temp project left behind, remove it by hand: ${proj} — ${e.message}`); }
   };
-  process.on('SIGINT', () => { console.error(`\nindeterminate: interrupted after ${records.length} record(s)`); finish(true); process.exit(2); });
+  // The exit has to happen even if finish() throws mid-signal, or Ctrl-C leaves
+  // the run alive: registering this listener disables Node's default termination.
+  process.on('SIGINT', () => {
+    console.error(`\nindeterminate: interrupted after ${records.length} record(s)`);
+    try { finish(true); } finally { process.exit(2); }
+  });
   try {
     for (const skill of skills) {
       const set = JSON.parse(readFileSync(join('skills', skill, 'evals.json'), 'utf8'));
       for (const q of set.queries) for (let r = 0; r < runs; r++) {
+        // The only dispatch point in the run: spawnSync blocks and nothing else
+        // here awaits, so without this yield the SIGINT handler above can never
+        // be called — and its mere registration has already disabled Node's
+        // default Ctrl-C termination. Negligible against a multi-second CLI call.
+        await new Promise(next => setImmediate(next));
         const args = ['-p', '--output-format', 'stream-json', '--verbose', '--max-turns', '3', '--allowedTools', 'Skill'];
         if (model) args.push('--model', model);
         const res = spawnSync('claude', args, { cwd: proj, input: q.query, encoding: 'utf8', shell: true, timeout: 120000 });
