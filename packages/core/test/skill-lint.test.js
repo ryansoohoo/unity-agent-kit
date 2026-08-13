@@ -60,3 +60,30 @@ test('skill-lint: the kit repo itself lints clean (dogfood)', async () => {
   const r = await lint.detect(createContext(REPO));
   assert.equal(r.status, 'pass', r.evidence);
 });
+
+function skillDirB(root, name, description, body) {
+  const d = join(root, '.claude', 'skills', name);
+  mkdirSync(d, { recursive: true });
+  writeFileSync(join(d, 'SKILL.md'), `---\nname: ${name}\ndescription: ${description}\n---\n${body}\n`);
+  return d;
+}
+
+const LONG_PARA =
+  'Wait on the epoch signal never on a clock poll the epoch file on a short loop until fresh and ready and the epoch has bumped past its pre-edit value because a poll started right after the trigger can land inside the editor scan cadence and read the old snapshot before the request was noticed.';
+
+test('skill-lint: near-verbatim paragraph shared by two skills is flagged', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'uak-sl-'));
+  skillDirB(root, 'dupe-a', 'Use when doing A-work in editors. Do NOT use for B-work.', `# a\n\n${LONG_PARA}\n\nUnique a-tail content here.`);
+  skillDirB(root, 'dupe-b', 'Use when doing B-work in pipelines. Do NOT use for A-work.', `# b\n\nTotally different opener for b.\n\n${LONG_PARA}`);
+  const r = await lint.detect(createContext(root));
+  assert.equal(r.status, 'warn');
+  assert.match(r.evidence, /dupe-a and dupe-b: near-duplicate paragraph/);
+});
+
+test('skill-lint: distinct bodies do not trip the duplicate check', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'uak-sl-'));
+  skillDirB(root, 'solo-a', 'Use when doing A-work in editors. Do NOT use for B-work.', `# a\n\n${LONG_PARA}`);
+  skillDirB(root, 'solo-b', 'Use when handling render pipelines. Do NOT use for editor tooling.', '# b\n\nA completely different paragraph about pipelines that shares no phrasing with the other skill at all beyond common words.');
+  const r = await lint.detect(createContext(root));
+  assert.equal(r.status, 'pass', r.evidence);
+});
