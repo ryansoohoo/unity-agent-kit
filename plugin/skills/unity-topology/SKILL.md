@@ -1,14 +1,15 @@
 ---
 name: unity-topology
-description: Use when planning parallel agents, worktrees, or a second Unity editor. Do NOT use for verifying code (unity-verify) or merge conflicts (unity-merge).
+description: Use when planning parallel agents, worktrees, a second Unity editor, or scene/prefab edit ownership. Do NOT use for verifying code (unity-verify) or merge conflicts (unity-merge).
 ---
 
 # One hot editor, many cold checkouts
 
 Unity permits exactly ONE editor per project folder (Temp/UnityLockfile;
-deleting it is the documented corruption path). A second editor requires a
-second directory — a git worktree — and costs ~2.5 GB + ~103 s cold init.
-A worktree with NO editor costs ~nothing and verifies in ~0.6 s via dotnet build.
+deleting it is the documented corruption path).
+A second editor requires a second directory — a git worktree — and costs
+~2.5 GB + ~103 s cold init (measured). A worktree with NO editor costs
+~nothing and verifies in ~0.6 s (measured) via dotnet build.
 
 ## The split
 - HOT (serialize): everything touching the asset graph — scene/prefab edits,
@@ -16,6 +17,11 @@ A worktree with NO editor costs ~nothing and verifies in ~0.6 s via dotnet build
   operation at a time.
 - COLD (parallelize): code-only work in editorless worktrees. This is where
   parallel agents pay.
+
+## Scene/prefab ownership (parallel waves)
+BAD:  two parallel tasks both "just tweak" OutdoorsScene.unity.
+GOOD: one owner per scene/prefab per wave; everyone else reads. Additive work
+      (new files) parallelizes freely — shared mutable YAML does not.
 
 ## Bounded dispatch (every parallel sub-task)
 - Pin model and effort explicitly; never inherit.

@@ -19,8 +19,7 @@ silently repointing every reference).
    whose references you keep; never invent a new guid.
 
 ## Prevention rules (you, the agent, enforce these)
-- Additive work merges; shared-scene edits do not. One owner per scene/prefab
-  per wave of parallel work.
+- Additive work merges; shared-scene edits do not (ownership rules: unity-topology).
 - Never switch branches in a checkout while a Unity editor has it open — asset
   refresh restarts mid-import and state tears.
 - Scene/prefab files sitting modified-uncommitted are unreconstructable if
