@@ -83,7 +83,24 @@ test('skill-lint: near-verbatim paragraph shared by two skills is flagged', asyn
 test('skill-lint: distinct bodies do not trip the duplicate check', async () => {
   const root = mkdtempSync(join(tmpdir(), 'uak-sl-'));
   skillDirB(root, 'solo-a', 'Use when doing A-work in editors. Do NOT use for B-work.', `# a\n\n${LONG_PARA}`);
-  skillDirB(root, 'solo-b', 'Use when handling render pipelines. Do NOT use for editor tooling.', '# b\n\nA completely different paragraph about pipelines that shares no phrasing with the other skill at all beyond common words.');
+  skillDirB(root, 'solo-b', 'Use when handling render pipelines. Do NOT use for editor tooling.', '# b\n\nA completely different paragraph about render pipelines that shares no phrasing at all with the other skill, beyond the handful of ordinary English words any two sentences inevitably have in common.');
   const r = await lint.detect(createContext(root));
   assert.equal(r.status, 'pass', r.evidence);
+});
+
+// LONG_PARA with four words reworded in its closing span. Measured against the
+// shipped helpers at 0.7455 (75%) shingle similarity: genuinely *near*-duplicate
+// rather than byte-identical, so an implementation that only compared paragraphs
+// for string equality would miss it and fail this test.
+const NEAR_PARA = LONG_PARA.replace(
+  'read the old snapshot before the request was noticed',
+  'read the stale capture before that call was observed');
+
+test('skill-lint: a reworded near-duplicate paragraph is still flagged', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'uak-sl-'));
+  skillDirB(root, 'near-a', 'Use when doing A-work in editors. Do NOT use for B-work.', `# a\n\n${LONG_PARA}`);
+  skillDirB(root, 'near-b', 'Use when handling render pipelines. Do NOT use for editor tooling.', `# b\n\n${NEAR_PARA}`);
+  const r = await lint.detect(createContext(root));
+  assert.equal(r.status, 'warn');
+  assert.match(r.evidence, /near-a and near-b: near-duplicate paragraph/);
 });
