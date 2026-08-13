@@ -43,7 +43,7 @@ const POLYSEMES = [
 ];
 function vocabFlags(skills) {
   const flags = [];
-  const positive = (d) => d.split(/\bdo not\b|\bdon['’]t\b/i)[0];
+  const positive = (d) => d.split(/\bdo not\b|\bdon['’]t\b|\bnot for\b/i)[0];
   const claims = new Map();
   for (const s of skills) {
     const seen = new Set();

@@ -133,3 +133,16 @@ test('skill-lint: polysemous term with a disambiguator passes', async () => {
   const r = await lint.detect(createContext(root));
   assert.equal(r.status, 'pass', r.evidence);
 });
+
+// "Not for …" is one of the three negative-trigger forms the description check
+// accepts, so the positive-clause splitter has to recognise it too — otherwise
+// nf-b's negative clause is read as a claim and "profiling" looks shared. The
+// pair measures 0.3125 description-jaccard, so a warn here could only be the
+// shadowing false positive this pins against.
+test('skill-lint: a term in a "Not for" negative clause is not a positive claim', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'uak-sl-'));
+  skillDir(root, 'nf-a', 'Use when profiling shader compilation output. Do NOT use for gameplay work.');
+  skillDir(root, 'nf-b', 'Use when authoring lightmap bakes for a level. Not for profiling.');
+  const r = await lint.detect(createContext(root));
+  assert.equal(r.status, 'pass', r.evidence);
+});
