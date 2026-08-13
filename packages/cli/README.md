@@ -171,9 +171,10 @@ Five skills, installed by the Claude Code plugin:
 - **unity-merge** — how to read and resolve Unity YAML conflicts left by the merge driver
   (`UU` files stay valid YAML, never corrupted `.meta` guids).
 - **unity-topology** — one hot editor for anything touching the asset graph, many cold
-  worktrees for code-only work, so parallel agents don't corrupt shared state.
-- **unity-recipes** — five common agent operations (compile-wait, console read, asset
-  refresh, perf investigation, scene edit ownership) as bad-pattern/good-pattern pairs.
+  worktrees for code-only work, and one owner per scene/prefab per wave, so parallel
+  agents don't corrupt shared state.
+- **unity-recipes** — four common agent operations (compile-wait, console read, asset
+  refresh, perf investigation) as bad-pattern/good-pattern pairs.
 - **unity-claude-md** — interviews you about your project, then generates a `CLAUDE.md`
   tailored to it instead of a generic template.
 

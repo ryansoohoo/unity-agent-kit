@@ -29,14 +29,17 @@ skills point here.
    (any content) also forces an import.
 2. DISCARD the trigger call's response. The reload kills the connection carrying
    it; a killed request can return a well-formed EMPTY 200 (silent false success).
-3. Wait on the epoch signal, never on a clock. One-liner:
+3. Wait on the epoch signal, never on a clock. Capture the pre-edit epoch
+   from `kit --epoch` BEFORE your edit. One-liner:
    `kit --wait-ready --since-epoch <pre-edit epoch> --timeout-ms 120000`
    (exit 0 = fresh+ready with the epoch bumped; exit 1 = a JSON reason).
    Or poll `kit --epoch` (or read `Temp/unity-agent-kit/epoch.json`) on a
    quarter-second loop until `fresh && state == "ready"` AND the epoch has
    bumped past its pre-edit value — not `ready` alone: a poll started right
    after the trigger can land inside the editor's half-second scan cadence
-   and read the old snapshot. After an asset-only refresh, watch
+   and read the old snapshot.
+   The file stays readable through the reload window where every port is dead.
+   After an asset-only refresh, watch
    `worldRevision` advance instead — it bumps every import batch, C# or not,
    while `epoch` only bumps on a domain reload. Hard deadline always (the
    120-second default): on timeout, say so and stop — a hung wait reported

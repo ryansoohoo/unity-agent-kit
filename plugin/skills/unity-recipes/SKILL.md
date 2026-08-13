@@ -8,7 +8,9 @@ description: Use when doing Unity agent operations (compile-wait, console read, 
 ## 1. Compile wait
 BAD:  edit Foo.cs → `sleep 5` → assume compiled. (Unfocused editors never
       auto-import; measured 90+ s of nothing. Sleeps waste ~12 s per loop.)
-GOOD: one bounded call that blocks until the editor is provably ready:
+GOOD: trigger the import explicitly (`unity command recompile`; with the
+      editor unfocused/headless, write `Temp/unity-agent-kit/refresh.request`),
+      then one bounded call that blocks until the editor is provably ready:
     node <kit>/packages/cli/bin/kit.js . --wait-ready --since-epoch <N>
       (exit 0 = fresh+ready with the epoch bumped past N; exit 1 = a JSON
       reason). Capture <N> from `kit --epoch` BEFORE your edit. Asset-only
