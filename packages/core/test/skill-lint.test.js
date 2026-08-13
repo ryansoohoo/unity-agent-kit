@@ -146,3 +146,31 @@ test('skill-lint: a term in a "Not for" negative clause is not a positive claim'
   const r = await lint.detect(createContext(root));
   assert.equal(r.status, 'pass', r.evidence);
 });
+
+test('skill-lint: unannotated machine numbers and unknown flags in bodies are contract findings', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'uak-sl-'));
+  skillDirB(root, 'contract', 'Use when doing C-work in editors. Do NOT use for D-work.',
+    '# c\n\nCold init costs about 103 s on a typical machine.\n\nRun the tool with --frobnicate to begin.');
+  const r = await lint.detect(createContext(root));
+  assert.equal(r.status, 'warn');
+  assert.match(r.evidence, /contract: unannotated measurement "103 s"/);
+  assert.match(r.evidence, /contract: unallowlisted flag "--frobnicate"/);
+});
+
+test('skill-lint: measured-annotated numbers and allowlisted flags pass', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'uak-sl-'));
+  skillDirB(root, 'contract-ok', 'Use when doing C-work in editors. Do NOT use for D-work.',
+    '# c\n\nCold init costs ~103 s (measured) on this rig.\n\nWait with `kit --wait-ready` before probing.');
+  const r = await lint.detect(createContext(root));
+  assert.equal(r.status, 'pass', r.evidence);
+});
+
+test('skill-lint: first-person POV and body when-to-use headings are form findings', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'uak-sl-'));
+  skillDirB(root, 'pov', 'I can help you merge Unity scenes. Use when merging scenes. Do NOT use for code.',
+    '# p\n\n## When to use\n\nWhenever.');
+  const r = await lint.detect(createContext(root));
+  assert.equal(r.status, 'warn');
+  assert.match(r.evidence, /pov: first\/second-person description/);
+  assert.match(r.evidence, /pov: "When to use" belongs in the description/);
+});

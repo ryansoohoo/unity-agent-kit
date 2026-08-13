@@ -65,6 +65,39 @@ function vocabFlags(skills) {
   return flags;
 }
 
+// Environment contracts rot silently (research E1): machine-measured numbers
+// must say so on the line; CLI flags must be kit-owned or adjudicated vendor
+// tokens (re-verify vendor tokens against the Unity CLI on editor upgrades).
+const CONTRACT_ALLOW = new Set([
+  '--wait-ready', '--since-epoch', '--timeout-ms', '--poll-ms', '--epoch',
+  '--only', '--fix', '--undo', '--json',            // kit-owned (version-locked to this repo)
+  '--fallback',                                     // vendor: UnityYAMLMerge, proven by the merge-driver suite
+  '--ours', '--theirs',                             // vendor: git checkout conflict-side selectors (verified against git 2.55 `checkout -h`)
+]);
+function contractFlags(skills) {
+  const flags = [];
+  for (const s of skills) {
+    for (const line of (s.body ?? '').split(/\r?\n/)) {
+      if (/\bmeasured\b/i.test(line)) continue;
+      const num = line.match(/~?\d+(?:\.\d+)?\s*(?:ms|s|GB|MB)\b/);
+      if (num) flags.push(`${s.name}: unannotated measurement "${num[0].trim()}" — add "measured" to the line or remove the number`);
+      for (const f of line.match(/--[a-z][\w-]+/g) ?? []) {
+        if (!CONTRACT_ALLOW.has(f)) flags.push(`${s.name}: unallowlisted flag "${f}" — kit flag? add to CONTRACT_ALLOW; vendor? adjudicate + comment`);
+      }
+    }
+  }
+  return flags;
+}
+function formFlags(skills) {
+  const flags = [];
+  for (const s of skills) {
+    if (/(^|[\s"”(])(I|I'll|you|we)\b/i.test(s.desc)) flags.push(`${s.name}: first/second-person description — write third person (discovery degrades otherwise)`);
+    if (/\bstep \d|\bfirst,|\bthen\b.*\bthen\b/i.test(s.desc)) flags.push(`${s.name}: procedure language in description — describe triggers, not workflow`);
+    if (/^##\s+When (to|not to) use/mi.test(s.body ?? '')) flags.push(`${s.name}: "When to use" belongs in the description — bodies load only after routing`);
+  }
+  return flags;
+}
+
 function collectSkills(root) {
   const out = [];
   for (const base of [join(root, '.claude', 'skills'), join(root, 'skills')]) {
@@ -113,6 +146,7 @@ register({
     }
     flags.push(...paraDupes(withDesc));
     flags.push(...vocabFlags(withDesc));
+    flags.push(...contractFlags(withDesc), ...formFlags(withDesc));
     const tokens = withDesc.reduce((n, s) => n + Math.ceil(s.desc.length / 4), 0);
     if (tokens > 500) flags.push(`resting cost ~${tokens} tokens across ${skills.length} descriptions (>500 budget)`);
     return flags.length
