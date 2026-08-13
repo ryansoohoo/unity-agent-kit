@@ -61,10 +61,12 @@ test('skill-lint: the kit repo itself lints clean (dogfood)', async () => {
   assert.equal(r.status, 'pass', r.evidence);
 });
 
+// description === null writes front matter without a description line.
 function skillDirB(root, name, description, body) {
   const d = join(root, '.claude', 'skills', name);
   mkdirSync(d, { recursive: true });
-  writeFileSync(join(d, 'SKILL.md'), `---\nname: ${name}\ndescription: ${description}\n---\n${body}\n`);
+  const fm = description === null ? `---\nname: ${name}\n---\n` : `---\nname: ${name}\ndescription: ${description}\n---\n`;
+  writeFileSync(join(d, 'SKILL.md'), `${fm}${body}\n`);
   return d;
 }
 
@@ -97,6 +99,7 @@ const NEAR_PARA = LONG_PARA.replace(
   'read the stale capture before that call was observed');
 
 test('skill-lint: a reworded near-duplicate paragraph is still flagged', async () => {
+  assert.notEqual(NEAR_PARA, LONG_PARA); // a LONG_PARA edit must not silently make this an exact-copy test
   const root = mkdtempSync(join(tmpdir(), 'uak-sl-'));
   skillDirB(root, 'near-a', 'Use when doing A-work in editors. Do NOT use for B-work.', `# a\n\n${LONG_PARA}`);
   skillDirB(root, 'near-b', 'Use when handling render pipelines. Do NOT use for editor tooling.', `# b\n\n${NEAR_PARA}`);
@@ -173,4 +176,40 @@ test('skill-lint: first-person POV and body when-to-use headings are form findin
   assert.equal(r.status, 'warn');
   assert.match(r.evidence, /pov: first\/second-person description/);
   assert.match(r.evidence, /pov: "When to use" belongs in the description/);
+});
+
+// A description-less skill is the least-linted kind there is (every
+// description sub-check skips it), so the body-level dedup must still see it.
+test('skill-lint: a description-less skill still participates in paragraph dedup', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'uak-sl-'));
+  skillDirB(root, 'has-desc', 'Use when doing A-work in editors. Do NOT use for B-work.', `# a\n\n${LONG_PARA}`);
+  skillDirB(root, 'no-desc', null, `# b\n\n${LONG_PARA}`);
+  const r = await lint.detect(createContext(root));
+  assert.equal(r.status, 'warn');
+  assert.match(r.evidence, /has-desc and no-desc: near-duplicate paragraph/);
+});
+
+// "execute" contains "exe" but says nothing about player builds, so it must
+// not silence the disambiguator demand.
+test('skill-lint: "execute" does not satisfy the build disambiguator', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'uak-sl-'));
+  skillDir(root, 'exec', 'Use when you execute build steps in Unity projects. Do NOT use for merges.');
+  const r = await lint.detect(createContext(root));
+  assert.equal(r.status, 'warn');
+  assert.match(r.evidence, /exec: "build" is polysemous/);
+});
+
+// The polyseme is the compile-adjacent word and its re-/pre- forms; "buildings"
+// is a different word that happens to start with it.
+test('skill-lint: "rebuild" needs a disambiguator, "buildings" does not', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'uak-sl-'));
+  skillDir(root, 'rebuilder', 'Use when a rebuild of the project pipeline is needed. Do NOT use for merges.');
+  const r = await lint.detect(createContext(root));
+  assert.equal(r.status, 'warn');
+  assert.match(r.evidence, /rebuilder: "build" is polysemous/);
+
+  const root2 = mkdtempSync(join(tmpdir(), 'uak-sl-'));
+  skillDir(root2, 'level-art', 'Use when placing buildings across a level layout. Do NOT use for code changes.');
+  const r2 = await lint.detect(createContext(root2));
+  assert.equal(r2.status, 'pass', r2.evidence);
 });

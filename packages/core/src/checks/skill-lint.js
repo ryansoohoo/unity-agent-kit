@@ -21,9 +21,12 @@ const shingleSet = (text) => {
 };
 function paraDupes(skills) {
   const flags = [];
+  // Shingle every paragraph once up front: the comparison is inherently
+  // pairwise, but re-shingling inside the loops makes that cost quadratic too.
+  const shingled = skills.map(s => paras(s.body ?? '').map(p => [p, shingleSet(p)]));
   for (let i = 0; i < skills.length; i++) for (let j = i + 1; j < skills.length; j++) {
-    for (const pa of paras(skills[i].body ?? '')) for (const pb of paras(skills[j].body ?? '')) {
-      const sim = jaccard(shingleSet(pa), shingleSet(pb));
+    for (const [pa, sa] of shingled[i]) for (const [, sb] of shingled[j]) {
+      const sim = jaccard(sa, sb);
       if (sim >= 0.6) {
         flags.push(`${skills[i].name} and ${skills[j].name}: near-duplicate paragraph (${Math.round(sim * 100)}% — "${pa.slice(0, 40)}…") — keep one canonical home and cross-reference`);
       }
@@ -32,18 +35,26 @@ function paraDupes(skills) {
   return flags;
 }
 
+// The accepted negative-trigger forms. ONE definition on purpose: detect() asks
+// whether a description has one, the positive-clause splitter below cuts at it,
+// and the two drifting apart silently turns negative clauses into claims.
+const NEG_TRIGGER = /\bdo not\b|\bdon['’]t\b|\bnot for\b/i;
+
 // Vocabulary discipline across sibling descriptions. Shadowing: one content
 // term claimed by two skills' POSITIVE clauses (before the negative trigger)
 // leaves the router a coin-flip. Polysemy: terms with two Unity meanings must
 // carry a disambiguator wherever they appear.
 const STOP = new Set(['use', 'when', 'the', 'a', 'an', 'or', 'and', 'for', 'in', 'of', 'to', 'with', 'not', 'do', 'unity', 'agent', 'agents', 'skill', 'skills', 'this', 'each', 'its', 'into', 'via']);
 const SHADOW_ALLOW = new Set(['scene', 'prefab']); // adjudicated: merge=conflict-time, topology=planning-time
+// termRe (optional) replaces the default `\b<term>` match where word forms
+// matter: build's compile-adjacent forms are re-/pre-prefixed, and "buildings"
+// is a different word that merely starts with it.
 const POLYSEMES = [
-  { term: 'build', re: /player|exe|compil/i, meanings: 'player build vs compilation' },
+  { term: 'build', termRe: /\b(?:re|pre)?build(?!ing)/i, re: /player|\bexe\b|compil/i, meanings: 'player build vs compilation' },
 ];
 function vocabFlags(skills) {
   const flags = [];
-  const positive = (d) => d.split(/\bdo not\b|\bdon['’]t\b|\bnot for\b/i)[0];
+  const positive = (d) => d.split(NEG_TRIGGER)[0];
   const claims = new Map();
   for (const s of skills) {
     const seen = new Set();
@@ -54,7 +65,7 @@ function vocabFlags(skills) {
       claims.get(w).push(s.name);
     }
     for (const p of POLYSEMES) {
-      if (new RegExp(`\\b${p.term}`, 'i').test(s.desc) && !p.re.test(s.desc)) {
+      if ((p.termRe ?? new RegExp(`\\b${p.term}`, 'i')).test(s.desc) && !p.re.test(s.desc)) {
         flags.push(`${s.name}: "${p.term}" is polysemous (${p.meanings}) — add a disambiguator`);
       }
     }
@@ -119,13 +130,22 @@ function collectSkills(root) {
   return out;
 }
 
+// How many findings the evidence line shows before collapsing to "+N": four
+// flag families feed one list now, so a single family cannot crowd out the rest.
+const EVIDENCE_CAP = 8;
+
 register({
   id: 'skill-lint', layer: 'workflow', title: 'Skill descriptions: cheap, non-overlapping, trigger-phrased',
   explain: () =>
     'Every installed skill description is loaded into EVERY session (a resting token cost) and is the only ' +
-    'signal deciding when the skill fires. This lints .claude/skills/ and skills/: missing or overlong ' +
-    'descriptions (>200 chars), missing "Use when…" firing conditions, missing negative triggers ' +
-    '("Do NOT use…"), near-duplicate overlap between two skills, and the summed resting cost. ' +
+    'signal deciding when the skill fires. This lints .claude/skills/ and skills/ on four dimensions: ' +
+    'description form (missing or >200 chars, no "Use when…" firing condition, no "Do NOT use…" negative ' +
+    'trigger, first/second-person or step-by-step phrasing, a "When to use" heading hidden in the body, ' +
+    'overlap between two descriptions, summed resting cost); paragraph near-duplication across bodies; ' +
+    'vocabulary (one content term claimed by two positive clauses, polysemes with no disambiguator); and ' +
+    'environment contracts (ms/s/GB/MB numbers whose line does not say "measured", CLI flags outside the ' +
+    'adjudicated allowlist). Duplication sensitivity: 120+ char paragraphs, 8-word shingles, 0.6 Jaccard — ' +
+    'a 300-char paragraph still matches after four reworded words, a 120-char one can miss after one. ' +
     'Detect-only: wording is a human/agent editing job, so there is no --fix.',
   detect: async (ctx) => {
     const skills = collectSkills(ctx.root);
@@ -135,7 +155,7 @@ register({
       if (!s.desc) { flags.push(`${s.name}: missing description`); continue; }
       if (s.desc.length > 200) flags.push(`${s.name}: description ${s.desc.length} chars (>200)`);
       if (!/\buse when\b/i.test(s.desc)) flags.push(`${s.name}: no "Use when" firing condition`);
-      if (!/\bdo not\b|\bdon['’]t\b|\bnot for\b/i.test(s.desc)) flags.push(`${s.name}: no negative trigger ("Do NOT use…")`);
+      if (!NEG_TRIGGER.test(s.desc)) flags.push(`${s.name}: no negative trigger ("Do NOT use…")`);
     }
     const withDesc = skills.filter(s => s.desc);
     for (let i = 0; i < withDesc.length; i++) {
@@ -144,13 +164,13 @@ register({
         if (sim > 0.5) flags.push(`${withDesc[i].name} and ${withDesc[j].name}: descriptions ${Math.round(sim * 100)}% overlapping — agents cannot pick between them`);
       }
     }
-    flags.push(...paraDupes(withDesc));
+    flags.push(...paraDupes(skills)); // bodies dedup across ALL skills: a description-less one is the least linted
     flags.push(...vocabFlags(withDesc));
     flags.push(...contractFlags(withDesc), ...formFlags(withDesc));
     const tokens = withDesc.reduce((n, s) => n + Math.ceil(s.desc.length / 4), 0);
     if (tokens > 500) flags.push(`resting cost ~${tokens} tokens across ${skills.length} descriptions (>500 budget)`);
     return flags.length
-      ? { status: 'warn', evidence: `${skills.length} skill(s), ~${tokens} resting tokens — ${flags.length} issue(s): ${flags.slice(0, 4).join('; ')}${flags.length > 4 ? ` +${flags.length - 4}` : ''}` }
+      ? { status: 'warn', evidence: `${skills.length} skill(s), ~${tokens} resting tokens — ${flags.length} issue(s): ${flags.slice(0, EVIDENCE_CAP).join('; ')}${flags.length > EVIDENCE_CAP ? ` +${flags.length - EVIDENCE_CAP}` : ''}` }
       : { status: 'pass', evidence: `${skills.length} skill(s), ~${tokens} resting tokens, all descriptions well-formed` };
   },
 });
