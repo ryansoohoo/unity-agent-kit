@@ -32,6 +32,39 @@ function paraDupes(skills) {
   return flags;
 }
 
+// Vocabulary discipline across sibling descriptions. Shadowing: one content
+// term claimed by two skills' POSITIVE clauses (before the negative trigger)
+// leaves the router a coin-flip. Polysemy: terms with two Unity meanings must
+// carry a disambiguator wherever they appear.
+const STOP = new Set(['use', 'when', 'the', 'a', 'an', 'or', 'and', 'for', 'in', 'of', 'to', 'with', 'not', 'do', 'unity', 'agent', 'agents', 'skill', 'skills', 'this', 'each', 'its', 'into', 'via']);
+const SHADOW_ALLOW = new Set(['scene', 'prefab']); // adjudicated: merge=conflict-time, topology=planning-time
+const POLYSEMES = [
+  { term: 'build', re: /player|exe|compil/i, meanings: 'player build vs compilation' },
+];
+function vocabFlags(skills) {
+  const flags = [];
+  const positive = (d) => d.split(/\bdo not\b|\bdon['’]t\b/i)[0];
+  const claims = new Map();
+  for (const s of skills) {
+    const seen = new Set();
+    for (const w of positive(s.desc).toLowerCase().match(/[a-z0-9][a-z0-9-]{2,}/g) ?? []) {
+      if (STOP.has(w) || SHADOW_ALLOW.has(w) || seen.has(w)) continue;
+      seen.add(w);
+      if (!claims.has(w)) claims.set(w, []);
+      claims.get(w).push(s.name);
+    }
+    for (const p of POLYSEMES) {
+      if (new RegExp(`\\b${p.term}`, 'i').test(s.desc) && !p.re.test(s.desc)) {
+        flags.push(`${s.name}: "${p.term}" is polysemous (${p.meanings}) — add a disambiguator`);
+      }
+    }
+  }
+  for (const [w, names] of claims) {
+    if (names.length >= 2) flags.push(`"${w}" claimed by ${names.join(' and ')} — positive clauses must not share content terms`);
+  }
+  return flags;
+}
+
 function collectSkills(root) {
   const out = [];
   for (const base of [join(root, '.claude', 'skills'), join(root, 'skills')]) {
@@ -79,6 +112,7 @@ register({
       }
     }
     flags.push(...paraDupes(withDesc));
+    flags.push(...vocabFlags(withDesc));
     const tokens = withDesc.reduce((n, s) => n + Math.ceil(s.desc.length / 4), 0);
     if (tokens > 500) flags.push(`resting cost ~${tokens} tokens across ${skills.length} descriptions (>500 budget)`);
     return flags.length

@@ -104,3 +104,32 @@ test('skill-lint: a reworded near-duplicate paragraph is still flagged', async (
   assert.equal(r.status, 'warn');
   assert.match(r.evidence, /near-a and near-b: near-duplicate paragraph/);
 });
+
+// Two words below are load-bearing: "shader" sits in BOTH positive clauses (the
+// shadowing to catch), and "profiling" sits in shadow-a's positive but shadow-b's
+// negative, so an implementation ignoring the do-NOT split would over-flag it.
+// The pair measures 0.4118 description-jaccard on the shipped helpers — under the
+// 0.5 overlap threshold, so the warn below can only come from the vocabulary check.
+test('skill-lint: a content term claimed by two positive clauses is flagged as shadowing', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'uak-sl-'));
+  skillDir(root, 'shadow-a', 'Use when profiling shader compilation output. Do NOT use for gameplay work.');
+  skillDir(root, 'shadow-b', 'Use when editing shader graphs in the node editor. Do NOT use for profiling.');
+  const r = await lint.detect(createContext(root));
+  assert.equal(r.status, 'warn');
+  assert.match(r.evidence, /"shader" claimed by shadow-a and shadow-b/);
+});
+
+test('skill-lint: polysemous term without a disambiguator is flagged', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'uak-sl-'));
+  skillDir(root, 'poly', 'Use when running build checks in Unity projects. Do NOT use for merges.');
+  const r = await lint.detect(createContext(root));
+  assert.equal(r.status, 'warn');
+  assert.match(r.evidence, /poly: "build" is polysemous/);
+});
+
+test('skill-lint: polysemous term with a disambiguator passes', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'uak-sl-'));
+  skillDir(root, 'poly-ok', 'Use when verifying changes compile cleanly. Do NOT use for player/exe builds.');
+  const r = await lint.detect(createContext(root));
+  assert.equal(r.status, 'pass', r.evidence);
+});
