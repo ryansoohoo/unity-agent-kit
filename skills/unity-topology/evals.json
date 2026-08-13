@@ -1,0 +1,25 @@
+{
+  "skill": "unity-topology",
+  "queries": [
+    { "query": "can i open a second unity editor on the same project folder", "expect": "unity-topology", "note": "core positive (one editor per folder); register: junior" },
+    { "query": "planning a parallel wave, who owns MainScene.unity while three agents work", "expect": "unity-topology", "note": "core positive: scene ownership during a parallel wave; register: ryan" },
+    { "query": "is it safe to run 4 agents on this repo at once", "expect": "unity-topology", "note": "positive with no worktree or editor vocabulary; register: casual" },
+    { "query": "do i need a worktree for the second agent or can they share the checkout", "expect": "unity-topology", "note": "positive on the hot/cold split; register: ryan" },
+    { "query": "how much disk does spinning up another editor actually cost us", "expect": "unity-topology", "note": "positive on the cost side of the second-editor decision; register: casual" },
+    { "query": "my mate deleted Temp/UnityLockfile so he could open a 2nd editor, is that fine", "expect": "unity-topology", "note": "positive on the documented corruption path; register: casual" },
+    { "query": "which of these tasks can run in parallel and which have to be serialized", "expect": "unity-topology", "note": "positive with no Unity vocabulary at all (hot/cold split); register: neutral" },
+    { "query": "what model and scope should i give the sub agent im about to spawn", "expect": "unity-topology", "note": "positive on bounded dispatch; register: junior, typo" },
+    { "query": "where should the worktrees live on windows, my paths are getting silly long", "expect": "unity-topology", "note": "positive on worktree placement (MAX_PATH headroom); register: casual" },
+    { "query": "two tasks both need to tweak the same prefab, how do we split that up", "expect": "unity-topology", "note": "positive on prefab ownership, planning-time; register: junior" },
+    { "query": "too late, both agents edited Env.prefab and git is showing UU", "expect": "unity-merge", "note": "near-miss (merge boundary): the same ownership story after the conflict already exists; register: casual" },
+    { "query": "whats the correct way to trigger a refresh from a headless agent", "expect": "unity-recipes", "note": "near-miss (recipes boundary): agent vocabulary, but it is an operation pattern; register: neutral" },
+    { "query": "the cold worktree agent finished, how do i check its code compiles", "expect": "unity-verify", "note": "near-miss (verify boundary): worktree keyword, verification question; register: neutral" },
+    { "query": "add our one-owner-per-scene rule to the project's AGENTS.md", "expect": "unity-claude-md", "note": "near-miss (claude-md boundary): topology content, but the ask is instruction text; register: neutral" },
+    { "query": "kick off a windows build on the second machine tonight", "expect": "none", "note": "polysemy: player build wearing this skill's second-machine vocabulary; register: casual" },
+    { "query": "we need a steam build ready for the playtest", "expect": "none", "note": "polysemy: player build is unclaimed territory; register: casual" },
+    { "query": "whats a good branching strategy for our team, trunk based or gitflow", "expect": "none", "note": "parallel-work planning that is plain git process, claimed by no kit skill; register: casual" },
+    { "query": "our CI spins up 8 parallel jobs, can we make that faster", "expect": "none", "note": "parallel keyword, but CI infrastructure sits outside every kit skill; register: casual" },
+    { "query": "we branched per agent and now the .meta files fight on every merge", "expect": "unity-merge", "note": "near-miss: planning framing, but the live problem is Unity YAML conflicts; register: casual" },
+    { "query": "how many cpu cores does unity actually use when it imports assets", "expect": "none", "note": "parallelism keyword on an engine-internals question; register: casual" }
+  ]
+}

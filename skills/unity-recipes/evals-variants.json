@@ -1,0 +1,3 @@
+{
+  "directive": "MUST use when doing Unity agent operations — compile-wait, console read, refresh, perf probe — each recipe pairs bad and good. Do not use for scene ownership (unity-topology) or merges (unity-merge)."
+}

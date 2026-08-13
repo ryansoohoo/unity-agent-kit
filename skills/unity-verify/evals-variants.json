@@ -1,0 +1,3 @@
+{
+  "directive": "ALWAYS use when proving a Unity C# change compiles or behaves — cheapest of three tiers, never a sleep. Do not use for merge conflicts (unity-merge), placement (unity-topology), or player/exe builds."
+}

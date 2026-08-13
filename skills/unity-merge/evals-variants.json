@@ -1,0 +1,3 @@
+{
+  "directive": "MANDATORY — use when git leaves UU on .unity/.prefab/.meta/.mat/.asset files or a Unity YAML merge stops. Do not hand-resolve blind; don't use for compile checks (unity-verify) or plain code merges."
+}

@@ -1,0 +1,3 @@
+{
+  "directive": "REQUIRED — use when planning parallel agents, worktrees, a second Unity editor, or scene/prefab edit ownership. Do not use for verifying code (unity-verify) or merge conflicts (unity-merge)."
+}

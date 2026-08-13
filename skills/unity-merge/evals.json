@@ -1,0 +1,25 @@
+{
+  "skill": "unity-merge",
+  "queries": [
+    { "query": "git status shows UU on Assets/Scenes/Main.unity, now what", "expect": "unity-merge", "note": "core positive: UU on a scene file; register: ryan" },
+    { "query": "both branches changed the same prefab and the merge stopped, help", "expect": "unity-merge", "note": "core positive without git status vocabulary; register: casual" },
+    { "query": "theres conflict markers in a .asset file, is it safe to just pick one side", "expect": "unity-merge", "note": "positive on the ours/theirs decision; register: junior, typo" },
+    { "query": "the .meta file conflicted and now im scared unity will regenerate the guid", "expect": "unity-merge", "note": "positive on the guid-identity rule; register: casual, typo" },
+    { "query": "how do i take my version of the scene file and throw theirs away", "expect": "unity-merge", "note": "positive phrased as intent, not as the checkout flag; register: casual" },
+    { "query": "the merge driver left the material as UU, what do i do with it", "expect": "unity-merge", "note": "positive on a .mat conflict, driver vocabulary; register: ryan" },
+    { "query": "i pulled and now Prefabs/Enemy.prefab is in conflict, please fix it for me", "expect": "unity-merge", "note": "positive after a pull rather than a merge; register: non-native" },
+    { "query": "can i just commit the file with the <<<<<<< in it and clean it up later", "expect": "unity-merge", "note": "positive that names the rule it is about to break; register: junior" },
+    { "query": "two people renamed the same asset and git is confused about the guids", "expect": "unity-merge", "note": "positive on duplicate-identity .meta conflicts; register: casual" },
+    { "query": "whats the safe order, resolve the .unity conflict first or the .meta", "expect": "unity-merge", "note": "positive on resolution sequencing; register: ryan" },
+    { "query": "i resolved the conflicts, now how do i make sure the project still compiles", "expect": "unity-verify", "note": "near-miss (verify boundary): conflict vocabulary, verification ask; register: casual" },
+    { "query": "how do we stop two agents fighting over the same scene next time", "expect": "unity-topology", "note": "near-miss (topology boundary): the same scene story at planning time, not conflict time; register: casual" },
+    { "query": "after resolving, whats the right way to make unity reimport the file", "expect": "unity-recipes", "note": "near-miss (recipes boundary): merge framing, refresh operation; register: casual" },
+    { "query": "put the never-commit-conflict-markers rule into our CLAUDE.md", "expect": "unity-claude-md", "note": "near-miss (claude-md boundary): this skill's own rule, but the ask is instruction text; register: neutral" },
+    { "query": "make a windows build off main once the merge lands", "expect": "none", "note": "polysemy: player build wearing merge vocabulary; register: casual" },
+    { "query": "we need an exe of the merged branch for the steam playtest", "expect": "none", "note": "polysemy: exe/player territory is unclaimed; register: casual" },
+    { "query": "Player.cs came out of the merge with conflict markers in it", "expect": "none", "note": "the explicit negative trigger: a normal code merge, no Unity YAML involved; register: neutral" },
+    { "query": "how do i squash these 6 commits before i merge them", "expect": "none", "note": "merge keyword on plain git history editing; register: casual" },
+    { "query": "git rebase says i have unstaged changes, what do i do", "expect": "none", "note": "git vocabulary with no conflict and no Unity asset; register: junior" },
+    { "query": "should each agent get its own branch so we stop hitting these conflicts", "expect": "unity-topology", "note": "near-miss: conflict keyword, but the ask is how to lay agents out; register: casual" }
+  ]
+}

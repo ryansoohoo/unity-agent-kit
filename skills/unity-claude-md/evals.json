@@ -1,0 +1,25 @@
+{
+  "skill": "unity-claude-md",
+  "queries": [
+    { "query": "set up a CLAUDE.md for this unity project", "expect": "unity-claude-md", "note": "core positive, file named outright; register: ryan" },
+    { "query": "our AGENTS.md is a mess, can you make it better", "expect": "unity-claude-md", "note": "positive on the improve half, AGENTS.md spelling; register: casual" },
+    { "query": "the agent keeps making the same mistake, where do i write that down so it stops", "expect": "unity-claude-md", "note": "positive that never names the file; register: casual" },
+    { "query": "new repo, no instructions file yet, interview me and write one", "expect": "unity-claude-md", "note": "positive on the interview shape; register: ryan" },
+    { "query": "what should even go in a unity claude.md, ours is just a copy of the readme", "expect": "unity-claude-md", "note": "positive on the README-vs-CLAUDE.md distinction; register: junior" },
+    { "query": "add a glossary of our system names to the project instructions", "expect": "unity-claude-md", "note": "positive on one template section (project vocabulary); register: neutral" },
+    { "query": "can you please generate the agent instructions file for our mobile game repo", "expect": "unity-claude-md", "note": "positive naming neither file; register: non-native" },
+    { "query": "i want the ai to know our frame budget and never break it, where does that live", "expect": "unity-claude-md", "note": "positive on never-compromise content; register: casual" },
+    { "query": "trim our CLAUDE.md, its 400 lines and nobody follows it", "expect": "unity-claude-md", "note": "positive on the simplify step of the maintenance loop; register: casual, typo" },
+    { "query": "document the footguns that burned us last sprint so the agent stops repeating them", "expect": "unity-claude-md", "note": "positive on the numbered-footgun section; register: ryan" },
+    { "query": "my CLAUDE.md says run the tests but how do i actually check the code compiles", "expect": "unity-verify", "note": "near-miss (verify boundary): the filename is a distractor, the ask is verification; register: casual" },
+    { "query": "our CLAUDE.md doesnt cover this, git left the scene file as UU, what now", "expect": "unity-merge", "note": "near-miss (merge boundary): filename distractor, live conflict; register: casual, typo" },
+    { "query": "how many agents can safely work in this repo at the same time", "expect": "unity-topology", "note": "near-miss (topology boundary): this skill's explicit negative trigger; register: casual" },
+    { "query": "whats the correct compile-wait pattern, ill write it into the docs after", "expect": "unity-recipes", "note": "near-miss (recipes boundary): documentation intent as the distractor; register: casual, typo" },
+    { "query": "make a windows build and drop it in the releases folder", "expect": "none", "note": "polysemy: player build is unclaimed territory; register: neutral" },
+    { "query": "build the game for steam and update the store page", "expect": "none", "note": "polysemy: second player-build phrasing; register: neutral" },
+    { "query": "write the README for this project", "expect": "none", "note": "closest near-miss: a markdown file for humans, which this skill explicitly is not; register: neutral" },
+    { "query": "generate api docs from the xml comments in our scripts", "expect": "none", "note": "generate/document vocabulary on reference docs no kit skill claims; register: casual" },
+    { "query": "write a CONTRIBUTING.md for our open source unity plugin", "expect": "none", "note": "instruction-shaped markdown that is neither CLAUDE.md nor AGENTS.md; register: neutral" },
+    { "query": "add a section to our unity coding standards wiki page", "expect": "none", "note": "project-convention writing that lives outside the agent instruction file; register: casual" }
+  ]
+}

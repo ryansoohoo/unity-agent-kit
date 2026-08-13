@@ -1,0 +1,25 @@
+{
+  "skill": "unity-verify",
+  "queries": [
+    { "query": "i changed PlayerController.cs, how do i know it actually compiled", "expect": "unity-verify", "note": "core positive (did it compile); register: casual" },
+    { "query": "check whether my new ScriptableObject type is attachable in the editor", "expect": "unity-verify", "note": "tier-2 positive (new type must become attachable); register: ryan" },
+    { "query": "verify the refactor didn't break anything before I push", "expect": "unity-verify", "note": "positive carrying no Unity vocabulary at all; register: neutral" },
+    { "query": "i added a new MonoBehaviour but it wont show up in the Add Component menu, is it even compiling", "expect": "unity-verify", "note": "tier-2 positive stated as a symptom rather than a request; register: junior, typo" },
+    { "query": "whats the fastest way to confirm my script change is good without even opening unity", "expect": "unity-verify", "note": "cheapest-tier positive (tier 1, editorless); register: casual" },
+    { "query": "i tweaked the gravity value in code, can you read back what the editor actually has now", "expect": "unity-verify", "note": "tier-0 probe positive (did my change take); register: casual" },
+    { "query": "rider says no errors but unity still runs the old behaviour, did my edit actually land", "expect": "unity-verify", "note": "positive on the stale-editor case, phrased in another IDE's terms; register: other-ide" },
+    { "query": "before I hand this branch off, prove the C# still typechecks in the worktree", "expect": "unity-verify", "note": "tier-1 positive carrying topology vocabulary (worktree) as a distractor; register: ryan" },
+    { "query": "please can you confirm the new inventory code is not only compiling but actually working in the editor", "expect": "unity-verify", "note": "positive on the behave half, not just compile; register: non-native" },
+    { "query": "we're about to demo, double check nothing under Assets/_Project/Scripts is broken", "expect": "unity-verify", "note": "positive with a different project layout and no verification jargon; register: other-layout" },
+    { "query": "git says both of us touched Boss.prefab and now it's UU", "expect": "unity-merge", "note": "near-miss (merge boundary): verification vocabulary absent, conflict present; register: casual" },
+    { "query": "make a windows build of the game for the playtest", "expect": "none", "note": "polysemy: player build is unclaimed territory; register: neutral" },
+    { "query": "can I run two editors so the second one verifies while I work", "expect": "unity-topology", "note": "near-miss (topology boundary): verify keyword, placement question; register: neutral" },
+    { "query": "is dumping the whole console after every compile the right way to catch errors", "expect": "unity-recipes", "note": "near-miss (recipes boundary): shares compile/errors, asks for the bad-vs-good pattern; register: junior" },
+    { "query": "build the game for steam, we ship friday", "expect": "none", "note": "polysemy: second player-build phrasing; register: casual" },
+    { "query": "write our verification steps into the repo's CLAUDE.md so agents stop guessing", "expect": "unity-claude-md", "note": "near-miss (claude-md boundary): verification keyword, but the ask is instruction text; register: neutral" },
+    { "query": "our il2cpp player build fails on android but the editor is fine", "expect": "none", "note": "reads like a compile failure but sits in the unclaimed player-build territory; register: casual" },
+    { "query": "whats the bad-vs-good way to chase a framerate drop, i usually just read the code and guess", "expect": "unity-recipes", "note": "near-miss: perf investigation is a recipe, not a verification tier; register: casual" },
+    { "query": "how do i verify the steam achievements are hooked up in the shipped exe", "expect": "none", "note": "verify keyword plus exe territory: the disambiguator's hardest case; register: casual" },
+    { "query": "does unity 6 still support net standard 2.1, want to check before we upgrade", "expect": "none", "note": "general Unity version question sharing check/compile vocabulary; register: casual" }
+  ]
+}
