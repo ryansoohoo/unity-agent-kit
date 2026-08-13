@@ -231,3 +231,24 @@ test('skill-lint: "rebuild" needs a disambiguator, "buildings" does not', async 
   const r2 = await lint.detect(createContext(root2));
   assert.equal(r2.status, 'pass', r2.evidence);
 });
+
+// Frontmatter may quote the description — a variant opening `NON-NEGOTIABLE:`
+// has to. Every check must read the VALUE a YAML parser delivers, not the
+// serialization: the two quote characters otherwise eat the length budget.
+test('skill-lint: a quoted description is measured by its value, not its quotes', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'uak-sl-'));
+  const value = 'Use when auditing Unity shader nodes and material property blocks. Do NOT use for lightmap bakes.'.padEnd(199, 'y');
+  assert.equal(value.length, 199);
+  skillDir(root, 'quoted', `'${value}'`); // 201 chars on the line, 199 of description
+  const r = await lint.detect(createContext(root));
+  assert.equal(r.status, 'pass', r.evidence);
+});
+
+// Quoting doubles internal apostrophes, which hid `don''t` from the
+// negative-trigger regex (and a leading quote hid first-person from the POV check).
+test('skill-lint: quoting does not hide a "don\'t" negative trigger', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'uak-sl-'));
+  skillDir(root, 'apostrophe', "'Use when Unity YAML conflicts appear in a merge. Don''t use for C# source files.'");
+  const r = await lint.detect(createContext(root));
+  assert.equal(r.status, 'pass', r.evidence);
+});

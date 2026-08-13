@@ -111,6 +111,23 @@ function formFlags(skills) {
   return flags;
 }
 
+// The frontmatter description may be a quoted YAML scalar — a variant opening
+// `NON-NEGOTIABLE:` cannot be written bare. Every check below reads the VALUE a
+// YAML parser delivers: quotes otherwise eat two chars of the length budget and
+// hide `don''t` from NEG_TRIGGER and a leading `I` from the POV check. Only a
+// scalar that round-trips is unwrapped, so `'a' and 'b'` is left alone.
+export function unquoteScalar(v) {
+  if (v.length >= 2 && v.startsWith("'") && v.endsWith("'")) {
+    const inner = v.slice(1, -1).replace(/''/g, "'");
+    if (`'${inner.replace(/'/g, "''")}'` === v) return inner;
+  }
+  if (v.length >= 2 && v.startsWith('"') && v.endsWith('"')) {
+    const inner = v.slice(1, -1).replace(/\\(.)/g, '$1');
+    if (`"${inner.replace(/([\\"])/g, '\\$1')}"` === v) return inner;
+  }
+  return v;
+}
+
 function collectSkills(root) {
   const out = [];
   for (const base of [join(root, '.claude', 'skills'), join(root, 'skills')]) {
@@ -123,7 +140,8 @@ function collectSkills(root) {
         if (!existsSync(p)) continue;
         const raw = readFileSync(p, 'utf8');
         const fm = raw.match(/^---\r?\n([\s\S]*?)\r?\n---/);
-        const desc = fm?.[1].match(/^description:\s*(.+?)\s*$/m)?.[1] ?? null;
+        const rawDesc = fm?.[1].match(/^description:\s*(.+?)\s*$/m)?.[1];
+        const desc = rawDesc === undefined ? null : unquoteScalar(rawDesc);
         const body = fm ? raw.slice(fm[0].length) : raw;
         out.push({ name, path: p, desc, body });
       } catch { /* unreadable skill: skip it, lint the rest */ }
