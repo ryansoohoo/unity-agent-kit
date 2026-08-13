@@ -20,6 +20,6 @@
     { "query": "our il2cpp player build fails on android but the editor is fine", "expect": "none", "note": "reads like a compile failure but sits in the unclaimed player-build territory; register: casual" },
     { "query": "whats the bad-vs-good way to chase a framerate drop, i usually just read the code and guess", "expect": "unity-recipes", "note": "near-miss: perf investigation is a recipe, not a verification tier; register: casual" },
     { "query": "how do i verify the steam achievements are hooked up in the shipped exe", "expect": "none", "note": "verify keyword plus exe territory: the disambiguator's hardest case; register: casual" },
-    { "query": "does unity 6 still support net standard 2.1, want to check before we upgrade", "expect": "none", "note": "general Unity version question sharing check/compile vocabulary; register: casual" }
+    { "query": "how long should I wait after saving a script before assuming Unity compiled it", "expect": "unity-recipes", "note": "CONTESTED, deliberately kept: compile-wait is unity-recipes' named operation, but unity-verify's Tier 2 body owns the canonical wait protocol. Adjudicated on the description surface (the routing signal), so unity-recipes. A miss here indicts the two descriptions, not the router; register: neutral" }
   ]
 }

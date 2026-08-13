@@ -18,7 +18,7 @@
     { "query": "make a mac build for the artists to try", "expect": "none", "note": "polysemy: player build is unclaimed territory; register: casual" },
     { "query": "our nightly build machine has to spit out an exe every night", "expect": "none", "note": "polysemy: build-server/exe phrasing; register: casual" },
     { "query": "how do i make a custom editor window with a button in it", "expect": "none", "note": "Unity how-to sharing the editor keyword; authoring editor UI is claimed by no kit skill; register: junior" },
-    { "query": "whats the best way to read a csv at runtime", "expect": "none", "note": "shares the read keyword with recipe 2 but is ordinary gameplay code; register: junior" },
+    { "query": "unity went back to ready but my change still isnt there, did the compile fail", "expect": "unity-verify", "note": "CONTESTED, deliberately kept: it lands mid compile-wait (this skill's named operation), but the failure tell — ready with no epoch bump means the compile failed — is unity-verify Tier 2's. Adjudicated to unity-verify because the ask is a verdict on a specific compile. A miss here indicts the two descriptions, not the router; register: casual, typo" },
     { "query": "after the refresh, how do i confirm the new type is attachable", "expect": "unity-verify", "note": "near-miss: recipe 3 vocabulary handing off to the tier-2 verification it ends in; register: neutral" },
     { "query": "the artist says our fbx assets import at the wrong scale, whats going on", "expect": "none", "note": "import vocabulary on an asset-pipeline question no kit skill claims; register: casual" }
   ]

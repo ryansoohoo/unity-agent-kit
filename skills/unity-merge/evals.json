@@ -16,7 +16,7 @@
     { "query": "after resolving, whats the right way to make unity reimport the file", "expect": "unity-recipes", "note": "near-miss (recipes boundary): merge framing, refresh operation; register: casual" },
     { "query": "put the never-commit-conflict-markers rule into our CLAUDE.md", "expect": "unity-claude-md", "note": "near-miss (claude-md boundary): this skill's own rule, but the ask is instruction text; register: neutral" },
     { "query": "make a windows build off main once the merge lands", "expect": "none", "note": "polysemy: player build wearing merge vocabulary; register: casual" },
-    { "query": "we need an exe of the merged branch for the steam playtest", "expect": "none", "note": "polysemy: exe/player territory is unclaimed; register: casual" },
+    { "query": "we need a windows build of the merged branch for the steam playtest", "expect": "none", "note": "polysemy: player-build territory is unclaimed; register: casual" },
     { "query": "Player.cs came out of the merge with conflict markers in it", "expect": "none", "note": "the explicit negative trigger: a normal code merge, no Unity YAML involved; register: neutral" },
     { "query": "how do i squash these 6 commits before i merge them", "expect": "none", "note": "merge keyword on plain git history editing; register: casual" },
     { "query": "git rebase says i have unstaged changes, what do i do", "expect": "none", "note": "git vocabulary with no conflict and no Unity asset; register: junior" },
