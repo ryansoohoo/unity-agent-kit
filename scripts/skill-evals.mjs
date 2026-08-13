@@ -111,8 +111,15 @@ async function main() {
   if (!Number.isInteger(runs) || runs < 1) die(`--runs must be a positive integer, got "${arg('--runs', '3')}"`);
   // --model reaches a shell command line (shell:true is needed for claude.cmd).
   if (model !== null && !/^[\w.:@-]+$/.test(model)) die(`--model has characters outside [A-Za-z0-9._:@-], got "${model}"`);
+  // Prove the results are writable now: discovering it at the end throws on the
+  // rescue path, which reads as exit 1 "thresholds missed" with the records lost.
+  try { mkdirSync(dirname(out), { recursive: true }); }
+  catch (e) { die(`--out directory is not creatable: ${dirname(out)} — ${e.message}`); }
   const probe = spawnSync('claude', ['--version'], { encoding: 'utf8', shell: true });
   if (probe.status !== 0) die('claude CLI unavailable');
+  // Provenance: which CLI produced these numbers. A results file from a stubbed
+  // or mismatched `claude` is otherwise indistinguishable from a real run.
+  const claudeVersion = (probe.stdout ?? '').trim();
   const proj = buildTempProject(allSkills, variant); // coexistence: ALL skills always installed
   // Pre-flight over the temp tree: a variant that fails the shipped skill-lint
   // must never produce numbers that read as routing data.
@@ -125,6 +132,19 @@ async function main() {
   }
   const records = []; const startedAt = new Date().toISOString();
   let partial = true; let score = null;
+  // One way out for all three exits (finished, threw, interrupted). The records
+  // are the expensive artifact, so they land BEFORE the temp dir is touched:
+  // removing it can EPERM on Windows just after a child exits, and a throw
+  // there would take a completed run's results with it.
+  const finish = (isPartial) => {
+    score = scoreRuns(records);
+    writeFileSync(out, JSON.stringify({ meta: { model, runs, variant, startedAt, claudeVersion, partial: isPartial }, records, score }, null, 2));
+    console.log(JSON.stringify(score.perSkill, null, 2));
+    // Absolute results path: the run is scratch, the file is what gets copied.
+    console.log(`cross-fires: ${score.crossFires.length}, indeterminate: ${score.indeterminate}, results: ${resolve(out)}`);
+    try { rmSync(proj, { recursive: true, force: true, maxRetries: 3 }); } catch { /* temp dir: the OS reaps it */ }
+  };
+  process.on('SIGINT', () => { console.error(`\nindeterminate: interrupted after ${records.length} record(s)`); finish(true); process.exit(2); });
   try {
     for (const skill of skills) {
       const set = JSON.parse(readFileSync(join('skills', skill, 'evals.json'), 'utf8'));
@@ -141,15 +161,7 @@ async function main() {
   } catch (e) {
     console.error(`indeterminate: run aborted after ${records.length} record(s) — ${e.message}`);
   } finally {
-    // Whatever happened, the tokens are already spent: land the records and take
-    // the temp project down with us.
-    rmSync(proj, { recursive: true, force: true });
-    score = scoreRuns(records);
-    mkdirSync(dirname(out), { recursive: true }); // a 300-call run must not die on a missing --out dir
-    writeFileSync(out, JSON.stringify({ meta: { model, runs, variant, startedAt, partial }, records, score }, null, 2));
-    console.log(JSON.stringify(score.perSkill, null, 2));
-    // Absolute results path: the run is scratch, the file is what gets copied.
-    console.log(`cross-fires: ${score.crossFires.length}, indeterminate: ${score.indeterminate}, results: ${resolve(out)}`);
+    finish(partial);
   }
   if (partial) process.exit(2);
   if (!records.length) die('no records — nothing was measured');
