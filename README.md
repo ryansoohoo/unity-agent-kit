@@ -71,9 +71,10 @@ claude plugin install unity-agent-kit
 this repo:
 
 ```
-claude plugin update unity-agent-kit
+claude plugin update unity-agent-kit@unity-agent-kit
 ```
 
+(the `plugin@marketplace` form — the bare name works for install but not update.)
 From a clone, `claude --plugin-dir ./plugin` still works as the contributor path.
 The plugin ships the skills only; the doctor/wizard still comes from the CLI door above.
 
