@@ -275,3 +275,6 @@ Noise floor, measured rather than asserted: the SAME unity-claude-md description
 ## Spend
 
 Four live runs, all self-reported by the harness (meta.spendUsd): cmd1 iteration $6.36, ver1 iteration $6.36, ver2 iteration $6.33, final coexistence $32.22. **Task 8 total $51.27**, against Ryan's $45-60 authorization. Wave total including the $32.73 baseline: $84.00.
+
+# Skill distribution (2026-08-13, post-wave)
+Plugin marketplace added at .claude-plugin/marketplace.json (5f49f94): skills now install and update straight from GitHub — `claude plugin marketplace add ryansoohoo/unity-agent-kit` + `claude plugin install unity-agent-kit`, updates via `claude plugin update unity-agent-kit`. Both manifests `claude plugin validate` clean; end-to-end proven from the public repo (clone → validate → install → enabled, user scope, v0.4.0). README Door 2 rewritten around it; --plugin-dir remains the contributor path. Kintarō dropped its five stale skill copies (d0ffe65) — it now rides the plugin, so the measured descriptions reach every project and copy-drift is structurally gone.
