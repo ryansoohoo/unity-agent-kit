@@ -1,6 +1,6 @@
 ---
 name: unity-claude-md
-description: Use when the user asks to set up, generate, or improve CLAUDE.md or AGENTS.md for a Unity project. Do NOT use for verification, merges, or topology questions.
+description: Use when a Unity CLAUDE.md or AGENTS.md needs writing, extending, or trimming, or a rule or footgun must be written down so agents stop repeating it. Do NOT use for verification, merges, or topology.
 ---
 
 # Generate a Unity project's CLAUDE.md by interview

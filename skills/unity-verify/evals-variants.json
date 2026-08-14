@@ -1,3 +1,5 @@
 {
-  "directive": "ALWAYS use when proving a Unity C# change compiles or behaves — cheapest of three tiers, never a sleep. Do not use for merge conflicts (unity-merge), placement (unity-topology), or player/exe builds."
+  "directive": "ALWAYS use when proving a Unity C# change compiles or behaves — cheapest of three tiers, never a sleep. Do not use for merge conflicts (unity-merge), placement (unity-topology), or player/exe builds.",
+  "ver1": "Use when proving Unity C# compiles or behaves, a change actually took, or a new type became attachable - cheapest of three tiers. Do NOT use for merge conflicts, placement, or player/exe builds.",
+  "ver2": "Use when verifying Unity C# changes compile or behave, or a new type became attachable - picks the cheapest of three tiers. Do NOT use for merge conflicts, placement, or player/exe builds."
 }

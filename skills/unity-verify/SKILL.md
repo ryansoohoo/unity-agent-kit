@@ -1,6 +1,6 @@
 ---
 name: unity-verify
-description: Use when verifying Unity C# changes compile or behave - picks the cheapest of three tiers. Do NOT use for merge conflicts (unity-merge), agent placement (unity-topology), or player/exe builds.
+description: Use when verifying Unity C# changes compile or behave, or a new type became attachable - picks the cheapest of three tiers. Do NOT use for merge conflicts, placement, or player/exe builds.
 ---
 
 # Unity verification: three tiers, cheapest first

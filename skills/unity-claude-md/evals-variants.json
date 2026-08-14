@@ -1,3 +1,4 @@
 {
-  "directive": "NON-NEGOTIABLE — use when a Unity project needs CLAUDE.md or AGENTS.md written, updated, or trimmed. Do not copy a template blind; don't use for verification, merges, or topology questions."
+  "directive": "NON-NEGOTIABLE — use when a Unity project needs CLAUDE.md or AGENTS.md written, updated, or trimmed. Do not copy a template blind; don't use for verification, merges, or topology questions.",
+  "cmd1": "Use when a Unity CLAUDE.md or AGENTS.md needs writing, extending, or trimming, or a rule or footgun must be written down so agents stop repeating it. Do NOT use for verification, merges, or topology."
 }
