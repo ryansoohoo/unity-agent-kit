@@ -1,2 +1,6 @@
 /node_modules/
 *.log
+
+# Claude Code worktrees. Nested multi-gigabyte Unity checkouts must never be
+# tracked, and must survive a `git clean -xdf` run from the parent checkout.
+/.claude/worktrees/
