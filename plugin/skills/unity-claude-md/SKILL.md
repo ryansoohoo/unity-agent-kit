@@ -11,6 +11,13 @@ README sells the project to humans; this file tells the agent how to change
 the code. Interview the user (one question at a time, short answers fine),
 then write CLAUDE.md from the template structure.
 
+If the project already HAS a CLAUDE.md or AGENTS.md, do not re-interview from
+scratch: read it first, ask only the questions below whose answers are missing
+or outgrown, and amend IN PLACE — headings, their order and the file's voice
+stay, and a new rule or footgun joins the section that already owns that
+content. Trim by the maintenance loop's Simplify step, not by rewrite. Show
+the user the diff.
+
 Ask, in order:
 1. What is this project? (one sentence, genre/purpose, Unity version, pipeline)
    And what does it never compromise on? (2-4: frame budget, feel, save
