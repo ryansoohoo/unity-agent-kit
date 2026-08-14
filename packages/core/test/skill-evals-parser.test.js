@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseSkillInvocations, scoreRuns, verdictFor } from '../../../scripts/skill-evals.mjs';
+import { parseSkillInvocations, scoreRuns, verdictFor, resultLine } from '../../../scripts/skill-evals.mjs';
 
 const LINE = (name) => JSON.stringify({
   type: 'assistant',
@@ -58,4 +58,24 @@ test('verdict: max-turns exhaustion is determinate, unlike every other non-zero 
   assert.equal(verdictFor({ error: new Error('ENOENT'), status: null, stdout: maxTurns }), 'indeterminate');
   // Noise around the result line must not be mistaken for one.
   assert.equal(verdictFor({ status: 1, stdout: 'not json\n{"type":"assistant"}\n' }), 'indeterminate');
+});
+
+// The result line is the run's only self-report of what it cost and how it
+// ended. The shape below is a real captured line (trimmed), so a CLI change
+// that renames these fields fails here rather than silently zeroing the spend
+// total and re-classifying every turn-exhausted record as indeterminate.
+test('resultLine: reads terminal_reason and cost off the stream, tolerates noise and absence', () => {
+  const stream = [
+    '{"type":"system","subtype":"init","model":"claude-opus-5[1m]"}',
+    'not json at all',
+    '{"type":"assistant","message":{"content":[{"type":"text","text":"hi"}]}}',
+    '{"subtype":"error_max_turns","is_error":true,"terminal_reason":"max_turns","total_cost_usd":0.1223,"type":"result","duration_ms":5186}',
+    '{"type":"system","subtype":"task_summary"}', // the result line is NOT last
+  ].join('\n');
+  assert.equal(resultLine(stream).terminal_reason, 'max_turns');
+  assert.equal(resultLine(stream).total_cost_usd, 0.1223);
+  // A run that died before emitting a result line yields {}, not a throw.
+  assert.deepEqual(resultLine('{"type":"system","subtype":"init"}'), {});
+  assert.deepEqual(resultLine(''), {});
+  assert.deepEqual(resultLine(undefined), {});
 });

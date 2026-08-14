@@ -42,7 +42,7 @@ export function scoreRuns(records) {
 
 // Fields off the stream's final `result` line. Returns {} when the run died
 // before emitting one — which is itself the signal that the call failed.
-function resultLine(stdoutText) {
+export function resultLine(stdoutText) {
   for (const line of (stdoutText ?? '').split(/\r?\n/)) {
     let j; try { j = JSON.parse(line); } catch { continue; }
     if (j?.type === 'result') return j;
@@ -200,10 +200,13 @@ async function main() {
     if (done) return; // a SIGINT landing after a complete run must not rewrite the file as partial
     done = true;
     score = scoreRuns(records);
-    writeFileSync(out, JSON.stringify({ meta: { model, runs, variant, startedAt, claudeVersion, effectiveModel, partial: isPartial }, records, score }, null, 2));
+    // What the run actually cost. A partial run reports the spend it already
+    // incurred, which is the number that matters when deciding to resume.
+    const spendUsd = Number(records.reduce((t, r) => t + (r.cost ?? 0), 0).toFixed(4));
+    writeFileSync(out, JSON.stringify({ meta: { model, runs, variant, startedAt, claudeVersion, effectiveModel, spendUsd, partial: isPartial }, records, score }, null, 2));
     console.log(JSON.stringify(score.perSkill, null, 2));
     // Absolute results path: the run is scratch, the file is what gets copied.
-    console.log(`cross-fires: ${score.crossFires.length}, indeterminate: ${score.indeterminate}, results: ${resolve(out)}`);
+    console.log(`cross-fires: ${score.crossFires.length}, indeterminate: ${score.indeterminate}, calls: ${records.length}, spend: $${spendUsd.toFixed(2)}, results: ${resolve(out)}`);
     try { rmSync(proj, { recursive: true, force: true, maxRetries: 3 }); }
     catch (e) { console.error(`note: temp project left behind, remove it by hand: ${proj} — ${e.message}`); }
   };
@@ -238,8 +241,9 @@ async function main() {
         // The CLI reports its failures as JSON on stdout, not stderr: during the
         // auth outage every record carried status 1 and an EMPTY stderr, leaving
         // the results file with no recorded cause. Keep a stdout tail too.
+        const line = resultLine(res.stdout);
         records.push({ skill, query: q.query, expect: q.expect, fired: verdict ? [] : parseSkillInvocations(res.stdout ?? ''), verdict,
-                       status: res.status ?? null, terminal: resultLine(res.stdout).terminal_reason ?? null,
+                       status: res.status ?? null, terminal: line.terminal_reason ?? null, cost: line.total_cost_usd ?? null,
                        stderr: (res.stderr ?? '').slice(-200), stdout: (res.stdout ?? '').slice(-300) });
         console.log(`${skill} | ${verdict ?? 'ok'} | expect=${q.expect} fired=${records.at(-1).fired.join('+') || '-'} | ${q.query.slice(0, 50)}`);
       }
