@@ -61,15 +61,22 @@ Exit code is `1` if and only if at least one check is failing; `0` otherwise.
 
 ### Door 2: Claude Code plugin
 
-Clone this repo, then load the plugin directory to get the five skills below available
-inside Claude Code:
+Install the five skills below straight from GitHub — no clone needed:
 
 ```
-claude --plugin-dir ./plugin
+claude plugin marketplace add ryansoohoo/unity-agent-kit
+claude plugin install unity-agent-kit
 ```
 
-This repo doesn't ship a marketplace catalog (`.claude-plugin/marketplace.json`), so
-`/plugin install` isn't an available install path — `--plugin-dir` is what works today.
+(inside a session: `/plugin marketplace add ryansoohoo/unity-agent-kit`, then
+`/plugin install unity-agent-kit`). Updating later is one command — it pulls from
+this repo:
+
+```
+claude plugin update unity-agent-kit
+```
+
+From a clone, `claude --plugin-dir ./plugin` still works as the contributor path.
 The plugin ships the skills only; the doctor/wizard still comes from the CLI door above.
 
 ### Door 3: Unity editor window (UPM)
