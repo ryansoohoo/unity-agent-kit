@@ -1,9 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { transcriptDirFor, readSessions, toolUses, toolResults, usageTotals } from '../src/transcripts.js';
+import { tmp } from './tmp.js';
 
 test('transcriptDirFor sanitizes every non-alphanumeric to "-" (incl. ō and :\\)', () => {
   assert.equal(
@@ -12,7 +13,7 @@ test('transcriptDirFor sanitizes every non-alphanumeric to "-" (incl. ō and :\\
 });
 
 test('readSessions parses JSONL, skips junk lines, never throws', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'uak-tr-'));
+  const dir = tmp('uak-tr-');
   writeFileSync(join(dir, 'a.jsonl'), [
     JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: '1', name: 'Bash', input: { command: 'echo hi' } }], usage: { input_tokens: 7, output_tokens: 3 } } }),
     'NOT JSON AT ALL {{{',
@@ -40,7 +41,7 @@ test('readSessions on a missing dir returns []', () => {
 });
 
 test('toolResults flattens plain-string content too', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'uak-tr-'));
+  const dir = tmp('uak-tr-');
   writeFileSync(join(dir, 'b.jsonl'),
     JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', content: 'plain' }] } }) + '\n');
   assert.deepEqual(toolResults(readSessions(dir)[0]), [{ line: 1, text: 'plain' }]);

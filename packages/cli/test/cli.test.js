@@ -1,10 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, mkdirSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { writeFileSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
+import { tmp } from '../../core/test/tmp.js';
 
 const BIN = join(dirname(fileURLToPath(import.meta.url)), '..', 'bin', 'kit.js');
 
@@ -14,7 +14,7 @@ function run(args, cwd) {
 }
 
 test('doctor --json emits parseable rows and exit 1 on failures', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'uak-'));
+  const dir = tmp('uak-');
   execFileSync('git', ['init', '-q', dir]);
   const r = run(['--json'], dir);
   const rows = JSON.parse(r.out);
@@ -24,7 +24,7 @@ test('doctor --json emits parseable rows and exit 1 on failures', () => {
 });
 
 test('doctor --json rows include a non-empty explain string (superset of human render)', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'uak-'));
+  const dir = tmp('uak-');
   execFileSync('git', ['init', '-q', dir]);
   const rows = JSON.parse(run(['--json'], dir).out);
   assert.ok(rows.length > 0);
@@ -35,7 +35,7 @@ test('doctor --json rows include a non-empty explain string (superset of human r
 });
 
 test('human output lists every check with a status glyph', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'uak-'));
+  const dir = tmp('uak-');
   execFileSync('git', ['init', '-q', dir]);
   const r = run([], dir);
   assert.match(r.out, /merge-driver/);
@@ -47,7 +47,7 @@ test('human output lists every check with a status glyph', () => {
 // a vendor call that must never run inside a unit test on a machine that has
 // the CLI installed. --only exercises the same code paths.
 test('--fix --yes repairs everything repairable, then doctor is clean of fails', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'uak-'));
+  const dir = tmp('uak-');
   execFileSync('git', ['init', '-q', dir]);
   execFileSync('git', ['-C', dir, 'config', 'user.email', 't@t.t']);
   const fix = run(['--fix', '--yes', '--only', 'hygiene'], dir);
@@ -57,7 +57,7 @@ test('--fix --yes repairs everything repairable, then doctor is clean of fails',
 });
 
 test('--undo restores pre-fix state', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'uak-'));
+  const dir = tmp('uak-');
   execFileSync('git', ['init', '-q', dir]);
   run(['--fix', '--yes', '--only', 'hygiene'], dir);
   const u = run(['--undo'], dir);
@@ -67,13 +67,13 @@ test('--undo restores pre-fix state', () => {
 });
 
 test('--fix without --yes on non-TTY exits 2', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'uak-'));
+  const dir = tmp('uak-');
   execFileSync('git', ['init', '-q', dir]);
   assert.equal(run(['--fix'], dir).code, 2);
 });
 
 test('--json rows include a boolean canApply (UPM door contract)', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'uak-'));
+  const dir = tmp('uak-');
   execFileSync('git', ['init', '-q', dir]);
   const rows = JSON.parse(run(['--json'], dir).out);
   for (const r of rows) assert.equal(typeof r.canApply, 'boolean', `${r.id} missing canApply`);
@@ -82,10 +82,10 @@ test('--json rows include a boolean canApply (UPM door contract)', () => {
 });
 
 test('human output renders ranked triage findings with clickable file:line', () => {
-  const fx = mkdtempSync(join(tmpdir(), 'uak-fx-'));
+  const fx = tmp('uak-fx-');
   const entry = { type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'x', name: 'Bash', input: { command: 'git clean -fdx' } }], usage: { input_tokens: 1, output_tokens: 1 } } };
   writeFileSync(join(fx, 's.jsonl'), JSON.stringify(entry) + '\n');
-  const dir = mkdtempSync(join(tmpdir(), 'uak-'));
+  const dir = tmp('uak-');
   execFileSync('git', ['init', '-q', dir]);
   const r = (() => {
     try { return { code: 0, out: execFileSync(process.execPath, [BIN, dir, '--only', 'audit'], { encoding: 'utf8', env: { ...process.env, UAK_TRANSCRIPTS: fx } }) }; }
@@ -99,7 +99,7 @@ test('human output renders ranked triage findings with clickable file:line', () 
 });
 
 test('a warn from a failed recorded proof is repairable via --fix (not stuck)', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'uak-'));
+  const dir = tmp('uak-');
   execFileSync('git', ['init', '-q', dir]);
   writeFileSync(join(dir, '.gitattributes'), '*.unity merge=unityyamlmerge\n');
   execFileSync('git', ['-C', dir, 'config', 'merge.unityyamlmerge.driver', "sh 'C:/x/unity-yaml-merge.sh' %O %A %B %P"]);
@@ -113,7 +113,7 @@ test('a warn from a failed recorded proof is repairable via --fix (not stuck)', 
 });
 
 test('--epoch is a machine-readable report: absent editor and live file both exit 0', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'uak-'));
+  const dir = tmp('uak-');
   execFileSync('git', ['init', '-q', dir]);
   const absent = run(['--epoch'], dir);
   assert.equal(absent.code, 0, absent.out);
@@ -131,7 +131,7 @@ test('--epoch is a machine-readable report: absent editor and live file both exi
 });
 
 test('--wait-ready: ok on a fresh ready signal, no-editor exit 1 when absent', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'uak-'));
+  const dir = tmp('uak-');
   execFileSync('git', ['init', '-q', dir]);
   const miss = run(['--wait-ready', '--timeout-ms', '400', dir], dir);
   assert.equal(miss.code, 1);
@@ -149,7 +149,7 @@ test('--wait-ready: ok on a fresh ready signal, no-editor exit 1 when absent', (
 // wait became a permanent hot poll loop. The exec timeout below is load-bearing:
 // it is what stops a regression from hanging the whole suite instead of failing.
 test('--wait-ready: a non-numeric option value exits 2 instead of waiting forever', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'uak-'));
+  const dir = tmp('uak-');
   execFileSync('git', ['init', '-q', dir]);
   const r = (() => {
     try { return { code: 0, out: execFileSync(process.execPath, [BIN, '--wait-ready', '--timeout-ms', dir], { cwd: dir, encoding: 'utf8', timeout: 5000 }) }; }

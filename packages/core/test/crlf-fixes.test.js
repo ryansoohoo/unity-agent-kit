@@ -1,15 +1,15 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createContext } from '../src/context.js';
 import '../src/checks/index.js';
 import { getCheck } from '../src/registry.js';
+import { tmp } from './tmp.js';
 
 test('worktree-ignore: a correct line written with CRLF endings still passes', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'uak-'));
+  const dir = tmp('uak-');
   execFileSync('git', ['init', '-q', dir]);
   writeFileSync(join(dir, '.gitignore'), 'node_modules/\r\n/.claude/worktrees/\r\n');
   const r = await getCheck('worktree-ignore').detect(createContext(dir));

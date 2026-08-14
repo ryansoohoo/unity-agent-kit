@@ -1,11 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { epochPath, requestPath, readEpoch, isFresh, requestRefresh, waitReady } from '../src/kanabo.js';
+import { tmp } from './tmp.js';
 
-const proj = () => mkdtempSync(join(tmpdir(), 'uak-kb-'));
+const proj = () => tmp('uak-kb-');
 
 function writeSnap(root, snap) {
   mkdirSync(join(root, 'Temp', 'unity-agent-kit'), { recursive: true });

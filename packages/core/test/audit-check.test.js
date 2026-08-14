@@ -1,24 +1,24 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createContext } from '../src/context.js';
 import '../src/checks/index.js';
 import { getCheck } from '../src/registry.js';
 import { DENY_RULES } from '../src/checks/blast-radius.js';
+import { tmp } from './tmp.js';
 
 const audit = getCheck('audit');
 const aUse = (name, input) => ({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'x', name, input }], usage: { input_tokens: 1, output_tokens: 1 } } });
 const aResult = (text) => ({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'x', content: text }] } });
 
 function fixture(entries) {
-  const dir = mkdtempSync(join(tmpdir(), 'uak-fx-'));
+  const dir = tmp('uak-fx-');
   writeFileSync(join(dir, 's.jsonl'), entries.map(e => JSON.stringify(e)).join('\n') + '\n');
   return dir;
 }
 
-async function detectWith(entries, root = mkdtempSync(join(tmpdir(), 'uak-au-'))) {
+async function detectWith(entries, root = tmp('uak-au-')) {
   process.env.UAK_TRANSCRIPTS = fixture(entries);
   try { return await audit.detect(createContext(root)); }
   finally { delete process.env.UAK_TRANSCRIPTS; }
@@ -32,7 +32,7 @@ test('audit: registered detect-only in the audit layer, local-only stated', () =
 });
 
 test('audit: na when no transcripts exist for this project', async () => {
-  const r = await audit.detect(createContext(mkdtempSync(join(tmpdir(), 'uak-au-'))));
+  const r = await audit.detect(createContext(tmp('uak-au-')));
   assert.equal(r.status, 'na');
   assert.match(r.evidence, /no local transcripts/);
 });
@@ -60,7 +60,7 @@ test('audit: destructive near-miss is fix-now without deny rules, superseded wit
   const r1 = await detectWith(entries);
   assert.equal(r1.detail.findings[0].signature, 'destructive-near-miss');
   assert.equal(r1.detail.findings[0].class, 'fix-now');
-  const guarded = mkdtempSync(join(tmpdir(), 'uak-au-'));
+  const guarded = tmp('uak-au-');
   mkdirSync(join(guarded, '.claude'), { recursive: true });
   writeFileSync(join(guarded, '.claude', 'settings.json'), JSON.stringify({ permissions: { deny: DENY_RULES } }));
   const r2 = await detectWith(entries, guarded);
@@ -90,17 +90,17 @@ test('audit: fix-now findings rank before needs-attention', async () => {
 });
 
 test('audit: garbage transcripts never crash the doctor', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'uak-fx-'));
+  const dir = tmp('uak-fx-');
   writeFileSync(join(dir, 'bad.jsonl'), '\u0000\u0001 total garbage\nmore garbage\n');
   process.env.UAK_TRANSCRIPTS = dir;
   try {
-    const r = await audit.detect(createContext(mkdtempSync(join(tmpdir(), 'uak-au-'))));
+    const r = await audit.detect(createContext(tmp('uak-au-')));
     assert.equal(r.status, 'na');
   } finally { delete process.env.UAK_TRANSCRIPTS; }
 });
 
 test('audit: structurally weird sessions run all scanners + tally without crashing', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'uak-fx-'));
+  const dir = tmp('uak-fx-');
   writeFileSync(join(dir, 'weird.jsonl'), [
     JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'x', name: 'Bash', input: { command: { toString: 'not-callable' } } }] } }),
     JSON.stringify({ type: 'assistant', message: { content: 'not-an-array' } }),
@@ -108,7 +108,7 @@ test('audit: structurally weird sessions run all scanners + tally without crashi
   ].join('\n') + '\n');
   process.env.UAK_TRANSCRIPTS = dir;
   try {
-    const r = await audit.detect(createContext(mkdtempSync(join(tmpdir(), 'uak-au-'))));
+    const r = await audit.detect(createContext(tmp('uak-au-')));
     assert.ok(['pass', 'warn'].includes(r.status));
     assert.equal(r.detail.sessions.length, 1);
     const s = r.detail.sessions[0];

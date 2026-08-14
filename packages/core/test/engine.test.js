@@ -1,16 +1,16 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, existsSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { existsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createContext } from '../src/context.js';
 import { register } from '../src/registry.js';
 import { doctor, applyOne } from '../src/engine.js';
 import { undoAll, loadAudit } from '../src/audit.js';
+import { tmp } from './tmp.js';
 
 function tmpRepo() {
-  const dir = mkdtempSync(join(tmpdir(), 'uak-'));
+  const dir = tmp('uak-');
   execFileSync('git', ['init', '-q', dir]);
   return dir;
 }

@@ -1,15 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
+import { tmp } from './tmp.js';
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 
 test('kanabo-proof --dry plans without touching Unity', () => {
-  const proj = mkdtempSync(join(tmpdir(), 'uak-proof-'));
+  const proj = tmp('uak-proof-');
   const out = execFileSync(process.execPath,
     [join(REPO, 'scripts', 'kanabo-proof.mjs'), '--project', proj, '--unity', 'X:\\nope\\Unity.exe', '--iters', '3', '--dry'],
     { encoding: 'utf8' });

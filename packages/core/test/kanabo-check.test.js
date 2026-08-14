@@ -1,16 +1,16 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createContext } from '../src/context.js';
 import '../src/checks/index.js';
 import { getCheck } from '../src/registry.js';
+import { tmp } from './tmp.js';
 
 const kanabo = getCheck('kanabo');
 
 function withSnap(snap) {
-  const dir = mkdtempSync(join(tmpdir(), 'uak-kbc-'));
+  const dir = tmp('uak-kbc-');
   if (snap) {
     mkdirSync(join(dir, 'Temp', 'unity-agent-kit'), { recursive: true });
     writeFileSync(join(dir, 'Temp', 'unity-agent-kit', 'epoch.json'), JSON.stringify(snap));

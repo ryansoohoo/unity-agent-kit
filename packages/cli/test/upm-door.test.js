@@ -1,10 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, existsSync, cpSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { readFileSync, existsSync, cpSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
+import { tmp } from '../../core/test/tmp.js';
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 
@@ -22,9 +22,9 @@ test('bundled Core~ runs the doctor end-to-end from OUTSIDE the repo (one code p
   const corePkg = join(REPO, 'upm', 'Core~', 'node_modules', '@unity-agent-kit', 'core', 'package.json');
   assert.ok(existsSync(corePkg), 'bundled engine is committed');
   assert.ok(!existsSync(join(REPO, 'upm', 'Core~', 'cli', 'test')), 'test dirs are excluded from the bundle');
-  const stage = mkdtempSync(join(tmpdir(), 'uak-upm-'));
+  const stage = tmp('uak-upm-');
   cpSync(join(REPO, 'upm', 'Core~'), join(stage, 'Core~'), { recursive: true });
-  const proj = mkdtempSync(join(tmpdir(), 'uak-'));
+  const proj = tmp('uak-');
   execFileSync('git', ['init', '-q', proj]);
   let out;
   try { out = execFileSync(process.execPath, [join(stage, 'Core~', 'cli', 'bin', 'kit.js'), proj, '--json'], { encoding: 'utf8' }); }
