@@ -194,3 +194,81 @@ HARNESS FIXES THIS RUN — the first live smoke returned 10 of 20 records indete
 - Records carry cost, terminal_reason and a stdout tail; meta carries maxTurns, settingSources, effectiveModel and spendUsd. The CLI reports its failures as JSON on stdout, so during the auth outage earlier in this wave every record's stderr was empty and the results file preserved no cause at all.
 
 Session note: the auth outage at the start of this task was real — `claude -p` returned exit 1 "Not logged in - Please run /login" on both shell paths at $0 cost, the run was blocked rather than attempted, and Ryan restored login before any measurement proceeded.
+
+# Skill quality wave (2026-08-13) — W6 description improvement and adoption
+
+Final matrix: docs/superpowers/specs/2026-08-13-skill-eval-final.json (all 300 records). Compare against docs/superpowers/specs/2026-08-13-skill-eval-baseline.json.
+
+WHAT THIS MEASURES — unchanged from the baseline section above and it must travel with every number here: whether the right skill fires as the model's FIRST action (maxTurns 1). A skill that would fire on turn 2 scores identically to one that never fires. Every bucket below is keyed by the EXPECTED skill, not by the eval set the query came from. Both runs: claudeVersion 2.1.228, effectiveModel claude-opus-5[1m], runs 3, maxTurns 1, settingSources project, indeterminate 0 of 300 — the comparability guard was checked on all four runs before any number here was believed.
+
+SCOPE — Ryan's focused-budget ruling (2026-08-13) supersedes the plan's "loop all five skills": only the two weak skills (unity-claude-md, unity-verify) were iterated, at most two iterations each, with one full-set coexistence run. THE TRADE, recorded deliberately: unity-merge (84.4%), unity-topology (84.4%) and unity-recipes (83.3%) kept their shipped descriptions this wave and were never measured against an alternative. Their `directive` variants remain on file in skills/<name>/evals-variants.json for a future wave. The spec's Definition of done says "W6 improvement loop run for all five skills"; three fifths of that line is deliberately unmet, not missed.
+
+SPLIT (analysis-time, deterministic, plan Step 1) — the harness runs whole eval sets, so the split is applied at SCORING time: each skill's 20 queries sorted by query text, then in each 5-block positions 3 and 5 go to HELD-OUT (8 held-out, 12 train per set). Iteration decisions read TRAIN only; adoption decisions read HELD-OUT only. Held-out lists are in the task-8 report.
+
+## What changed and why
+
+**unity-claude-md — ADOPTED (candidate cmd1, one iteration).**
+
+- before: `Use when the user asks to set up, generate, or improve CLAUDE.md or AGENTS.md for a Unity project. Do NOT use for verification, merges, or topology questions.` (158 chars)
+- after: `Use when a Unity CLAUDE.md or AGENTS.md needs writing, extending, or trimming, or a rule or footgun must be written down so agents stop repeating it. Do NOT use for verification, merges, or topology.` (199 chars)
+- Manipulation CLASS (not token counts — the delta-table tokenizer in the W4 report differs from skill-lint's): positive-clause trigger-surface expansion. The negative clause is the shipped one minus the trailing word "questions", so this is close to a pure positive-clause manipulation.
+- Why: the baseline's failure was silence on MODIFYING an existing instructions file and on "where does this rule live so the agent stops repeating the mistake" — not misrouting (0 wrong-fires in 42 baseline records). The new positive clause names the modification verbs and the write-it-down surface.
+- Decided by HELD-OUT: 14/24 baseline -> 24/24 candidate (all-expect); 0/9 -> 9/9 on its own positives. Zero cross-fires in the candidate run. TRAIN was flat (25/36 both), which is why the loop stopped at one iteration.
+
+**unity-verify — ADOPTED (candidate ver2, two iterations).**
+
+- before: `Use when verifying Unity C# changes compile or behave - picks the cheapest of three tiers. Do NOT use for merge conflicts (unity-merge), agent placement (unity-topology), or player/exe builds.` (192 chars)
+- after: `Use when verifying Unity C# changes compile or behave, or a new type became attachable - picks the cheapest of three tiers. Do NOT use for merge conflicts, placement, or player/exe builds.` (188 chars)
+- Manipulation CLASS: positive-clause surface ADDITION plus a negative-clause shortening. The two changes are confounded and cannot be separated by this data — the 200-char lint cap forced the trade (the sibling-naming parentheticals `(unity-merge)` and `(unity-topology)` are what funded the added clause). This is the same length-budget-versus-manipulation-depth coupling the W4 report flagged.
+- Why iteration 1 (ver1) was REJECTED: it replaced the shipped general clause ("verifying Unity C# changes compile or behave") with "proving Unity C# compiles or behaves, a change actually took". Held-out improved (15/24 -> 17/24) but TRAIN fell (28/33 -> 24/33 all-expect) as three general-verification queries dropped together, and it produced a cross-fire the baseline did not have. The adoption rule requires held-out >= baseline AND no new cross-fire, so ver1 was disqualified on the cross-fire and diagnosed instead.
+- ver2 restores the shipped general clause verbatim and appends only the surface ver1 proved: "a new type became attachable". The "a change actually took" clause was dropped because it earned nothing measurable — the live-value read-back query it was written for stayed 0/3 under it.
+- Decided by HELD-OUT: 15/24 baseline -> 16/24 candidate (all-expect); 3/9 -> 4/9 on its own positives; zero cross-fires in the ver2 run. A one-record margin, which is thin — see the noise note below.
+
+**unity-merge, unity-topology, unity-recipes — KEPT, unmeasured against any alternative.** Not a finding about their descriptions; a budget decision.
+
+## Before/after, expect-keyed buckets (300 calls each, first-action definition)
+
+| bucket (expected) | baseline | final | delta |
+|---|---|---|---|
+| none | 72/72 (100%) | 72/72 (100%) | 0 |
+| unity-claude-md | 10/42 (23.8%) | 19/42 (45.2%) | **+9** |
+| unity-verify | 27/48 (56.3%) | 31/48 (64.6%) | **+4** |
+| unity-topology | 38/45 (84.4%) | 39/45 (86.7%) | +1 |
+| unity-recipes | 40/48 (83.3%) | 40/48 (83.3%) | 0 |
+| unity-merge | 38/45 (84.4%) | 33/45 (73.3%) | **-5** |
+| **overall** | **225/300 (75.0%)** | **234/300 (78.0%)** | **+9** |
+
+`none` stayed 72/72. The kit still has zero false positives after both adoptions — the broadened claude-md clause did not reach a single README, CONTRIBUTING, wiki, api-docs or player-build query.
+
+Per-SET held-out (all-expect, excluding the premise-gap query), which is what the revert rule reads:
+
+| set | baseline held-out | final held-out |
+|---|---|---|
+| unity-claude-md | 14/24 (58.3%) | **21/24 (87.5%)** |
+| unity-verify | 15/24 (62.5%) | **16/24 (66.7%)** |
+| unity-topology | 21/24 (87.5%) | 21/24 (87.5%) |
+| unity-recipes | 17/24 (70.8%) | 16/24 (66.7%) |
+| unity-merge | 18/24 (75.0%) | 16/24 (66.7%) |
+
+## Revert decision: NOTHING REVERTED, and the reasoning is on the record
+
+Plan Step 4 reverts an adoption when a skill's held-out rate drops or a new cross-fire appears. Both ADOPTED skills improved on held-out. No new cross-fire pattern exists: the final run has 5 cross-fire run-instances across 2 distinct queries, both patterns already present in the baseline, and the baseline's largest pattern (3x unity-recipes poaching "after the refresh, how do i confirm the new type is attachable") is GONE — unity-verify now takes that query 3/3, which is the clearest single confirmation that the adopted "attachable" clause does what it was written to do.
+
+The two skills that dropped, unity-merge (-2 held-out) and unity-recipes (-1), had NO adoption to revert — their descriptions are untouched. The strict-coexistence reading of the rule would revert both adoptions anyway; that reading was rejected on evidence, and here is the evidence: in all 300 final calls, not one record shows unity-claude-md or unity-verify firing where it should not have (claude-md misses: 23 silent, 0 wrong; the "wrong" counts in the verify and recipes buckets are unity-recipes and unity-merge poaching, both baseline patterns). Every record unity-merge lost, it lost to SILENCE, not to an adopted skill.
+
+Noise floor, measured rather than asserted: the SAME unity-claude-md description scored 24/24 on its held-out split in the iteration run and 21/24 in the final run. A 3-record swing on a 24-record split with zero description change is the run-to-run noise of this harness, and it is larger than both regressions. unity-merge's -5 bucket delta is worth a look in a future wave, but this wave cannot attribute it.
+
+## Contested pair — settled, in unity-recipes' favour, and only half of it moved
+
+- skills/unity-verify/evals.json:23 "how long should I wait after saving a script before assuming Unity compiled it" (expects unity-recipes): **3/3 in the baseline, 3/3 in the final.** Stable across four runs; the adjudication holds.
+- skills/unity-recipes/evals.json:21 "unity went back to ready but my change still isnt there, did the compile fail" (expects unity-verify): **1/3 baseline -> 0/3 final**, unity-recipes taking all three. The verify adoption did not win it back; it lost the single instance it had. The compile-wait / did-it-land boundary is now fully unity-recipes' on the description surface.
+- Related and moving the other way: "after the refresh, how do i confirm the new type is attachable" (expects unity-verify) went 0/3 with 3 cross-fires -> 3/3 clean. So the boundary did move, on the ATTACHABLE half only. The stale-change half needs live-state read-back vocabulary in unity-verify's positive clause — and "read" is already claimed by unity-recipes' positive clause ("console read"), so skill-lint's shadowing rule blocks the obvious wording. Either re-adjudicate the expectation or find non-colliding vocabulary; do not spend another run on it without one of those.
+
+## Surfaces still silent (candidates for a future wave, all measured 0/3 in the final run)
+
+- unity-claude-md: "our AGENTS.md is a mess, can you make it better"; "trim our CLAUDE.md, its 400 lines and nobody follows it". Note both "write this rule INTO our CLAUDE.md" queries that live in the merge and recipes sets are also still 0/3, while the identical shape in the topology set went 0/3 -> 2/3 — when the rule's CONTENT is another skill's territory (conflict markers, bad/good patterns), that skill's description wins the routing even though the ask is to write a file.
+- unity-verify: "i tweaked the gravity value in code, can you read back what the editor actually has now" — the Tier 0 live-probe surface, blocked by the vocabulary collision described above.
+
+## Spend
+
+Four live runs, all self-reported by the harness (meta.spendUsd): cmd1 iteration $6.36, ver1 iteration $6.36, ver2 iteration $6.33, final coexistence $32.22. **Task 8 total $51.27**, against Ryan's $45-60 authorization. Wave total including the $32.73 baseline: $84.00.
