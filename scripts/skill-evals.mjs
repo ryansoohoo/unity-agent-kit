@@ -40,10 +40,41 @@ export function scoreRuns(records) {
   return { perSkill, crossFires, indeterminate };
 }
 
-// A non-zero exit is a failed CLI call (expired auth, usage limit, rate limit,
-// bad --model), not a skill declining to fire. Scoring it as a miss would read
-// as trigger collapse with indeterminate: 0.
-export function verdictFor(res) { return (res.error || res.status !== 0) ? 'indeterminate' : null; }
+// Fields off the stream's final `result` line. Returns {} when the run died
+// before emitting one — which is itself the signal that the call failed.
+function resultLine(stdoutText) {
+  for (const line of (stdoutText ?? '').split(/\r?\n/)) {
+    let j; try { j = JSON.parse(line); } catch { continue; }
+    if (j?.type === 'result') return j;
+  }
+  return {};
+}
+
+// The effective model, off the stream's `init` line. Worth recording: with user
+// settings excluded the CLI may not resolve the model the interactive session uses.
+export function initModel(stdoutText) {
+  for (const line of (stdoutText ?? '').split(/\r?\n/)) {
+    let j; try { j = JSON.parse(line); } catch { continue; }
+    if (j?.type === 'system' && j?.subtype === 'init') return j.model ?? null;
+  }
+  return null;
+}
+
+// A non-zero exit is normally a failed CLI call (expired auth, usage limit, rate
+// limit, bad --model), not a skill declining to fire; scoring it as a miss would
+// read as trigger collapse with indeterminate: 0.
+// The exception is turn exhaustion. `--max-turns` is a budget WE set, and the
+// router's choice is made on turn 1 and is already in the stream by the time the
+// budget runs out — so that record is determinate and keeps its parsed `fired`.
+// Measured before this rule existed: it discarded 10 of 20 smoke records, and
+// discarded them unevenly (a query that routes then investigates exhausts turns,
+// a query that routes then answers does not), which biased the loss toward the
+// strongest positives.
+export function verdictFor(res) {
+  if (res.error) return 'indeterminate';
+  if (res.status === 0) return null;
+  return resultLine(res.stdout).terminal_reason === 'max_turns' ? null : 'indeterminate';
+}
 
 function arg(name, dflt) {
   const i = process.argv.indexOf(name);
@@ -67,8 +98,31 @@ const yamlSingleQuoted = (s) => `'${s.replace(/'/g, "''")}'`;
 const yamlUnquote = (raw) => (raw.startsWith("'") && raw.endsWith("'") ? raw.slice(1, -1).replace(/''/g, "'") : raw);
 const frontmatterDesc = (md) => md.match(/^---\r?\n([\s\S]*?)\r?\n---/)?.[1]?.match(/^description:\s*(.+?)\s*$/m)?.[1];
 
+// The eval queries name files ("i changed PlayerController.cs", "both of us
+// touched Boss.prefab"). Against an empty directory those premises are false,
+// and a model that looks before routing correctly answers "there is nothing to
+// verify" — which scores as a trigger miss while actually measuring the scratch
+// dir. These stubs exist only to make the premises plausible; nothing reads them.
+function writeUnityShape(proj) {
+  const files = {
+    'Assets/Scripts/PlayerController.cs': 'using UnityEngine;\n\npublic class PlayerController : MonoBehaviour\n{\n    public float gravity = -9.81f;\n\n    void Update() { }\n}\n',
+    'Assets/Scenes/OutdoorsScene.unity': '%YAML 1.1\n%TAG !u! tag:unity3d.com,2011:\n--- !u!29 &1\nOcclusionCullingSettings:\n  m_ObjectHideFlags: 0\n',
+    'Assets/Prefabs/Boss.prefab': '%YAML 1.1\n%TAG !u! tag:unity3d.com,2011:\n--- !u!1 &100000\nGameObject:\n  m_Name: Boss\n',
+    'ProjectSettings/ProjectVersion.txt': 'm_EditorVersion: 6000.5.5f1\n',
+  };
+  for (const [rel, body] of Object.entries(files)) {
+    const p = join(proj, rel);
+    mkdirSync(dirname(p), { recursive: true });
+    writeFileSync(p, body, 'utf8');
+  }
+  // Several queries are phrased around git state ("git says both of us touched
+  // Boss.prefab"). A non-repo makes those premises false the same way.
+  spawnSync('git', ['init', '-q'], { cwd: proj, shell: true });
+}
+
 function buildTempProject(skillNames, variant) {
   const proj = mkdtempSync(join(tmpdir(), 'uak-evals-'));
+  writeUnityShape(proj);
   for (const name of skillNames) {
     const src = join('skills', name); const dst = join(proj, '.claude', 'skills', name);
     mkdirSync(dst, { recursive: true });
@@ -134,6 +188,10 @@ async function main() {
   }
   const records = []; const startedAt = new Date().toISOString();
   let partial = true; let score = null; let done = false;
+  // Provenance, second half: --setting-sources project drops user settings, so
+  // the model the CLI actually resolves here need not be the one the interactive
+  // session uses. Recorded from the first call's init line.
+  let effectiveModel = null;
   // One way out for all three exits (finished, threw, interrupted). The records
   // are the expensive artifact, so they land BEFORE the temp dir is touched:
   // removing it can EPERM on Windows just after a child exits, and a throw
@@ -142,7 +200,7 @@ async function main() {
     if (done) return; // a SIGINT landing after a complete run must not rewrite the file as partial
     done = true;
     score = scoreRuns(records);
-    writeFileSync(out, JSON.stringify({ meta: { model, runs, variant, startedAt, claudeVersion, partial: isPartial }, records, score }, null, 2));
+    writeFileSync(out, JSON.stringify({ meta: { model, runs, variant, startedAt, claudeVersion, effectiveModel, partial: isPartial }, records, score }, null, 2));
     console.log(JSON.stringify(score.perSkill, null, 2));
     // Absolute results path: the run is scratch, the file is what gets copied.
     console.log(`cross-fires: ${score.crossFires.length}, indeterminate: ${score.indeterminate}, results: ${resolve(out)}`);
@@ -164,11 +222,25 @@ async function main() {
         // be called — and its mere registration has already disabled Node's
         // default Ctrl-C termination. Negligible against a multi-second CLI call.
         await new Promise(next => setImmediate(next));
-        const args = ['-p', '--output-format', 'stream-json', '--verbose', '--max-turns', '3', '--allowedTools', 'Skill'];
+        // --max-turns 1: which skill the router reaches for is a first-turn
+        // property, so a bigger budget only buys turns of the model doing work
+        // it is not being scored on (measured ~40% dearer per call).
+        // --setting-sources project: load the temp project's settings only, so
+        // the skill universe is the kit's five plus the CLI's own built-ins and
+        // does NOT move with whatever plugins are installed on this machine.
+        // (Measured: it drops a superpowers plugin that was winning kit queries.)
+        const args = ['-p', '--output-format', 'stream-json', '--verbose', '--max-turns', '1',
+                      '--allowedTools', 'Skill', '--setting-sources', 'project'];
         if (model) args.push('--model', model);
         const res = spawnSync('claude', args, { cwd: proj, input: q.query, encoding: 'utf8', shell: true, timeout: 120000 });
         const verdict = verdictFor(res);
-        records.push({ skill, query: q.query, expect: q.expect, fired: verdict ? [] : parseSkillInvocations(res.stdout ?? ''), verdict, status: res.status ?? null, stderr: (res.stderr ?? '').slice(-200) });
+        effectiveModel ??= initModel(res.stdout);
+        // The CLI reports its failures as JSON on stdout, not stderr: during the
+        // auth outage every record carried status 1 and an EMPTY stderr, leaving
+        // the results file with no recorded cause. Keep a stdout tail too.
+        records.push({ skill, query: q.query, expect: q.expect, fired: verdict ? [] : parseSkillInvocations(res.stdout ?? ''), verdict,
+                       status: res.status ?? null, terminal: resultLine(res.stdout).terminal_reason ?? null,
+                       stderr: (res.stderr ?? '').slice(-200), stdout: (res.stdout ?? '').slice(-300) });
         console.log(`${skill} | ${verdict ?? 'ok'} | expect=${q.expect} fired=${records.at(-1).fired.join('+') || '-'} | ${q.query.slice(0, 50)}`);
       }
     }

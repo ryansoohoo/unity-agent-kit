@@ -43,3 +43,19 @@ test('verdict: a non-zero exit or a failed spawn is indeterminate, not a miss', 
   assert.equal(verdictFor({ status: null }), 'indeterminate'); // timeout
   assert.equal(verdictFor({ error: new Error('ENOENT'), status: null }), 'indeterminate');
 });
+
+// Turn exhaustion exits non-zero but is NOT a failed call: the router already
+// chose on turn 1 and that choice is in the stream, so the record stays
+// determinate and keeps its parsed `fired`. Measured: with the model free to
+// use tools after routing, this was 10 of 20 smoke records.
+test('verdict: max-turns exhaustion is determinate, unlike every other non-zero exit', () => {
+  const result = (extra) => JSON.stringify({ type: 'result', is_error: true, ...extra });
+  const maxTurns = result({ subtype: 'error_max_turns', terminal_reason: 'max_turns' });
+  assert.equal(verdictFor({ status: 1, stdout: maxTurns }), null);
+  // Real captured shape from the auth outage: same exit 1, no max_turns marker.
+  assert.equal(verdictFor({ status: 1, stdout: result({ terminal_reason: 'api_error', result: 'Not logged in · Please run /login' }) }), 'indeterminate');
+  // A spawn failure is unknowable regardless of what sits in the buffer.
+  assert.equal(verdictFor({ error: new Error('ENOENT'), status: null, stdout: maxTurns }), 'indeterminate');
+  // Noise around the result line must not be mistaken for one.
+  assert.equal(verdictFor({ status: 1, stdout: 'not json\n{"type":"assistant"}\n' }), 'indeterminate');
+});
