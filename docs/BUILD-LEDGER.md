@@ -128,3 +128,69 @@ SHIPPED — CI: .github/workflows/test.yml, windows-latest, Node 20+24 matrix. G
 NOT SHIPPED — npm (Ryan's call at gate G2, 2026-08-12): machine not npm-authed; publish + npx end-to-end verify + README npm-caveat cleanup deferred to a future session. Prereqs recorded: `npm login`; create the `unity-agent-kit` org on npmjs.com (Ryan chose org over user-scope rename); CLI name `unity-agent-kit` verified free (E404, 2026-08-12). Publish order: core before cli (exact-pin dependency). README's "once published" npx framing intentionally retained — it is still true.
 
 Known minors deferred (triage when convenient): --wait-ready exit 2 undocumented in README flag bullet; num() accepts negative values (bounded either way); OPT_FLAGS is a hand-maintained registry (comment the invariant); core package publishes with no README (empty npm page) and cli README references files outside its tarball (LICENSE/NOTICE/test paths); run-tests.mjs could reuse fstree.listFiles(); engines ">=20" vs readdirSync-recursive's 20.1.0 floor (inert: workflow resolves latest 20.x, roots flat); merge-driver test helper duplicates the driver's discovery in JS (drift → loud red, never silent pass); unity-yaml-merge.sh resolves UnityYAMLMerge before the .meta text-merge branch, so .meta merges fail without Unity though they don't need the tool (product call).
+
+# Skill quality wave (2026-08-13) — baseline measurement
+
+Plan: docs/superpowers/specs/2026-08-13-skill-quality-design.md. Matrix: docs/superpowers/specs/2026-08-13-skill-eval-baseline.json (all 300 records, each carrying its own cost, terminal reason and stdout tail).
+
+WHAT THIS MEASURES — the definition is baked into every number below and must travel with them: whether the right skill fires as the model's FIRST action. maxTurns is 1, so a query that routes on turn 2 scores identically to one that never routes at all. Note also that --allowedTools is an auto-approve list, NOT a restriction: the model reached for Bash/Glob/Read freely and permission_denials came back empty; it simply is not scored on anything after turn 1. This is arguably the sharpest available definition of trigger quality — a skill that fires only after the model has already started guessing has not done its job — but it is a floor, not the whole picture.
+
+Harness: `node scripts/skill-evals.mjs --runs 3`. 100 queries x 3 runs = 300 calls, 2705s (45 min), **$32.73 actual** (mean $0.109/call, max $0.152; the run self-reports spend as of e9e8e97). claudeVersion 2.1.228, effectiveModel claude-opus-5[1m], runs 3, maxTurns 1, settingSources project.
+
+**indeterminate: 0 of 300.** Every call landed a determinate verdict. (289 terminated max_turns, 11 completed — under a 1-turn cap both are normal, and turn exhaustion is determinate by design because the routing decision is made before the budget runs out.)
+
+PER-SKILL, keyed by the EXPECTED skill — not by the eval set the query came from. Each bucket aggregates that skill's positives across all five sets, so every set's near-miss and polysemy queries land in the bucket of whatever should have fired:
+
+| bucket (expected) | hit | miss | rate |
+|---|---|---|---|
+| none | 72 | 0 | 100% |
+| unity-merge | 38 | 7 | 84.4% |
+| unity-topology | 38 | 7 | 84.4% |
+| unity-recipes | 40 | 8 | 83.3% |
+| unity-verify | 27 | 21 | 56.3% |
+| unity-claude-md | 10 | 32 | 23.8% |
+| **overall** | **225** | **75** | **75.0%** |
+
+`none` at 72/72 is the headline defensive result: across 24 distinct polysemy and unclaimed-territory queries, three runs each, the kit never once fired a skill it should not have. There are no false positives to fix.
+
+MISS ANATOMY — the misses are overwhelmingly SILENCE, not misrouting. Of 75 misses, **68 fired nothing at all** and only 7 fired something wrong:
+
+| bucket | silent | wrong |
+|---|---|---|
+| unity-claude-md | 32 | 0 |
+| unity-verify | 16 | 5 |
+| unity-merge | 7 | 0 |
+| unity-recipes | 7 | 1 |
+| unity-topology | 6 | 1 |
+
+The descriptions are not losing arguments to each other; they are failing to raise their hand. That points Task 8 at trigger surface, not at disambiguation.
+
+CROSS-FIRES: **7 run-instances across 4 distinct queries** — the count is run-instances, not distinct queries, so a query that cross-fires on all three runs counts three times. Every one is kit-vs-kit; **no ambient skill won a single query in 300 calls**, which is the isolation working.
+
+- 3x expect=unity-verify, fired=unity-recipes — "after the refresh, how do i confirm the new type is attachable"
+- 2x expect=unity-verify, fired=unity-recipes — "unity went back to ready but my change still isnt there, did the compile fail" [CONTESTED, see below]
+- 1x expect=unity-topology, fired=unity-topology+unity-recipes — "two agents both want to trigger a refresh at the same time, who gets the..."
+- 1x expect=unity-recipes, fired=unity-merge — "after resolving, whats the right way to make unity reimport the file"
+
+Note the direction: 5 of the 7 are unity-recipes poaching a unity-verify query, both on post-refresh "is my change really there" phrasings. That boundary is the one real disambiguation defect in the set.
+
+CONTESTED PAIR — tagged in-file, reported separately because a miss here indicts the two descriptions, not the router:
+
+- skills/unity-verify/evals.json:23 "how long should I wait after saving a script before assuming Unity compiled it" (expects unity-recipes): **3/3 hit**. The adjudication holds under measurement.
+- skills/unity-recipes/evals.json:21 "unity went back to ready but my change still isnt there, did the compile fail" (expects unity-verify): **1/3 hit** — fired unity-recipes twice, unity-verify once. Genuinely contested rather than simply wrong, and it supplies 2 of the 7 cross-fires. The compile-wait / did-it-land boundary is unresolved on the description surface and Task 8 should settle it in one direction or the other.
+
+WHERE THE TWO WEAK BUCKETS FAIL — both patterns are crisp enough to act on:
+
+- **unity-claude-md (23.8%)** splits cleanly on verb. Creation phrasings fire ("set up a CLAUDE.md" 3/3, "generate the agent instructions file" 3/3, "what should even go in a unity claude.md" 3/3); every modification phrasing is silent 0/3 ("add our one-owner-per-scene rule to the project's AGENTS.md", "trim our CLAUDE.md", "write these bad and good patterns into our CLAUDE.md", "document the footguns that burned us last sprint", "put the never-commit-conflict-markers rule into our CLAUDE.md"). The description covers authoring a new instructions file and not editing an existing one.
+- **unity-verify (56.3%)** is silent on symptom-shaped and read-back positives ("check whether my new ScriptableObject type is attachable" 0/3, "i added a new MonoBehaviour but it wont show up in the Add Component menu" 0/3, "i tweaked the gravity value in code, can you read back what the editor actually has" 0/3) while scoring 3/3 on every explicitly compile-flavored ask. Symptoms stated as complaints do not reach it.
+
+CAVEAT — one query is excluded from trigger-quality conclusions: "we're about to demo, double check nothing under Assets/_Project/Scripts is broken" (expects unity-verify) scored 0/3, but the harness's stub Unity project creates Assets/Scripts, not Assets/_Project/Scripts, so that query's premise is false in the eval environment and the silence is not attributable to the description. Its raw outcome is recorded here and in the matrix; excluding it, unity-verify is **27/45 = 60.0%**. The other two path-naming queries (PlayerController.cs, Boss.prefab) are covered by the stub shape.
+
+HARNESS FIXES THIS RUN — the first live smoke returned 10 of 20 records indeterminate and was NOT used as a baseline; the run above is on a fixed harness (99b2bd6, e9e8e97, 38c60bb):
+
+- Turn exhaustion is determinate. --max-turns is a budget we set, not a fault, and the router's choice is already in the stream when it runs out. The old code mapped every non-zero exit to indeterminate, discarding real answers — one captured record had fired=["superpowers:verification-before-completion"] sitting behind a verdict of indeterminate — and discarding them unevenly: queries that route then investigate exhausted the budget, queries that route then answer did not, so the loss fell hardest on the strongest positives.
+- The temp project was inheriting user-level plugins: 38 skills and 1 plugin visible, with superpowers skills winning kit queries. --setting-sources project brings it to 24 skills and 0 plugins — the kit's 5 plus the CLI's own built-ins, which no flag removes short of disabling skills outright. The universe is now pinned to claudeVersion instead of moving with whatever is installed on the machine. It is NOT "the kit's 5 alone": built-in verify and debug skills are in the pool, so 0 ambient wins in 300 calls is a measured result against real competition, not an absence of it.
+- The temp project gained a minimal Unity shape (PlayerController.cs, OutdoorsScene.unity, Boss.prefab, ProjectVersion.txt, git init). Against an empty dir the queries' premises are false and a model that looks before routing correctly answers "there is nothing to verify" — scoring as a trigger miss while actually measuring the scratch dir. Verified in the act before the shape existed.
+- Records carry cost, terminal_reason and a stdout tail; meta carries maxTurns, settingSources, effectiveModel and spendUsd. The CLI reports its failures as JSON on stdout, so during the auth outage earlier in this wave every record's stderr was empty and the results file preserved no cause at all.
+
+Session note: the auth outage at the start of this task was real — `claude -p` returned exit 1 "Not logged in - Please run /login" on both shell paths at $0 cost, the run was blocked rather than attempted, and Ryan restored login before any measurement proceeded.
