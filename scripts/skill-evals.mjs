@@ -10,6 +10,15 @@ import { dirname, join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 
+// The two settings that define what the numbers MEAN. Single source for both
+// the spawn args and the results meta: a baseline whose recorded settings had
+// drifted from the ones actually used would be worse than no baseline at all.
+//   maxTurns 1      — score the router's FIRST action, nothing after it
+//   settingSources  — project only, so the skill universe cannot move with
+//                     whatever plugins happen to be installed on this machine
+const MAX_TURNS = 1;
+const SETTING_SOURCES = 'project';
+
 export function parseSkillInvocations(stdoutText) {
   const fired = [];
   for (const line of stdoutText.split(/\r?\n/)) {
@@ -202,8 +211,11 @@ async function main() {
     score = scoreRuns(records);
     // What the run actually cost. A partial run reports the spend it already
     // incurred, which is the number that matters when deciding to resume.
-    const spendUsd = Number(records.reduce((t, r) => t + (r.cost ?? 0), 0).toFixed(4));
-    writeFileSync(out, JSON.stringify({ meta: { model, runs, variant, startedAt, claudeVersion, effectiveModel, spendUsd, partial: isPartial }, records, score }, null, 2));
+    // `Number(r.cost) || 0` coerces defensively on purpose: this sits in the
+    // pre-write window, and a CLI that ever returns a non-numeric cost must not
+    // throw here and take a 300-call artifact down with it.
+    const spendUsd = Number(records.reduce((t, r) => t + (Number(r.cost) || 0), 0).toFixed(4));
+    writeFileSync(out, JSON.stringify({ meta: { model, runs, variant, startedAt, claudeVersion, effectiveModel, maxTurns: MAX_TURNS, settingSources: SETTING_SOURCES, spendUsd, partial: isPartial }, records, score }, null, 2));
     console.log(JSON.stringify(score.perSkill, null, 2));
     // Absolute results path: the run is scratch, the file is what gets copied.
     console.log(`cross-fires: ${score.crossFires.length}, indeterminate: ${score.indeterminate}, calls: ${records.length}, spend: $${spendUsd.toFixed(2)}, results: ${resolve(out)}`);
@@ -232,8 +244,8 @@ async function main() {
         // the skill universe is the kit's five plus the CLI's own built-ins and
         // does NOT move with whatever plugins are installed on this machine.
         // (Measured: it drops a superpowers plugin that was winning kit queries.)
-        const args = ['-p', '--output-format', 'stream-json', '--verbose', '--max-turns', '1',
-                      '--allowedTools', 'Skill', '--setting-sources', 'project'];
+        const args = ['-p', '--output-format', 'stream-json', '--verbose', '--max-turns', String(MAX_TURNS),
+                      '--allowedTools', 'Skill', '--setting-sources', SETTING_SOURCES];
         if (model) args.push('--model', model);
         const res = spawnSync('claude', args, { cwd: proj, input: q.query, encoding: 'utf8', shell: true, timeout: 120000 });
         const verdict = verdictFor(res);
