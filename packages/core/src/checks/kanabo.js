@@ -12,6 +12,15 @@ register({
   detect: async (ctx) => {
     const snap = readEpoch(ctx.root);
     if (!snap) return { status: 'na', evidence: 'no epoch signal — install the kit\'s UPM package and open the project in the editor once (v2)' };
+    // A blocked editor has a stale main-thread heartbeat by construction, so
+    // this branch must precede the freshness check. Only a MODAL is a defect:
+    // it needs a human. A long synchronous import stalls the main thread too
+    // and resolves on its own, so it is reported as normal progress.
+    if (snap.blocked?.kind === 'modal') {
+      const title = snap.blocked.title || 'untitled';
+      return { status: 'warn', evidence: `editor BLOCKED by modal "${title}" for ${Math.round((snap.blocked.mainStalledMs ?? 0) / 1000)} s — dismiss it; epoch ${snap.epoch}` };
+    }
+    if (snap.blocked) return { status: 'pass', evidence: `epoch ${snap.epoch} - revision ${snap.worldRevision} - state ${snap.state} - main thread stalled ${Math.round((snap.blocked.mainStalledMs ?? 0) / 1000)} s (import/refresh in progress)` };
     if (!isFresh(snap)) return { status: 'na', evidence: `editor not running (heartbeat stale; last epoch ${snap.epoch})` };
     return { status: 'pass', evidence: `epoch ${snap.epoch} - revision ${snap.worldRevision} - state ${snap.state}` };
   },
