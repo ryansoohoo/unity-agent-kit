@@ -60,7 +60,9 @@ namespace UnityAgentKit.Doctor
 
         static void MaybeTrim()
         {
-            if (writesSinceTrim < TrimEvery) return;
+            // Incremented under Gate from any thread; this cheap pre-check runs
+            // every frame outside the lock, so read it volatile.
+            if (Volatile.Read(ref writesSinceTrim) < TrimEvery) return;
             try
             {
                 lock (Gate)

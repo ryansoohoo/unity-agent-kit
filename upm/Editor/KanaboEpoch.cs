@@ -55,14 +55,18 @@ namespace UnityAgentKit.Doctor
             if (AssetDatabase.IsAssetImportWorkerProcess()) return;
             try
             {
-                KitConsole.Install();
-                KitBlocked.Install();
                 Pid = System.Diagnostics.Process.GetCurrentProcess().Id;
                 // The static ctor reruns after EVERY domain reload — that IS the epoch.
                 Epoch = SessionState.GetInt("uak.epoch", 0) + 1;
                 SessionState.SetInt("uak.epoch", Epoch);
                 if (string.IsNullOrEmpty(SessionState.GetString("uak.sessionId", "")))
                     SessionState.SetString("uak.sessionId", Guid.NewGuid().ToString("N"));
+
+                // After the epoch is assigned, not before: KitConsole stamps
+                // every entry with CurrentEpoch, so installing it earlier would
+                // file the first logs of a reload under the previous epoch.
+                KitConsole.Install();
+                KitBlocked.Install();
 
                 // Never claim ready before looking: initial project open runs
                 // InitializeOnLoad while the first import is still going.

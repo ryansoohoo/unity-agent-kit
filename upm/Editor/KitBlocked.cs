@@ -29,7 +29,11 @@ namespace UnityAgentKit.Doctor
         static Timer timer;
         static long lastMainMs;
         static long stallStartMs;
-        static int pid;
+        // Bumped by every main-thread tick. A probe captures it before it
+        // starts composing and re-reads it after the write: if it moved, the
+        // stall the file describes is already over.
+        static int resumeGen;
+        static int probeInFlight;
         static bool installed;
 
         [Serializable] class Blocked { public string kind; public string title; public long sinceMs; public long threadHeartbeatMs; public long mainStalledMs; }
@@ -38,7 +42,9 @@ namespace UnityAgentKit.Doctor
         {
             if (installed) return;
             installed = true;
+#if UNITY_EDITOR_WIN
             pid = Process.GetCurrentProcess().Id;
+#endif
             Interlocked.Exchange(ref lastMainMs, Now());
             timer = new Timer(_ => Probe(), null, PeriodMs, PeriodMs);
             AssemblyReloadEvents.beforeAssemblyReload += () => { try { timer?.Dispose(); } catch { } };
@@ -47,27 +53,34 @@ namespace UnityAgentKit.Doctor
         internal static void MainThreadAlive()
         {
             Interlocked.Exchange(ref lastMainMs, Now());
-            if (stallStartMs != 0)
+            Interlocked.Increment(ref resumeGen);
+            // Read-and-clear in one step; only a tick that actually ended a
+            // recorded stall pays for the File.Exists.
+            if (Interlocked.Exchange(ref stallStartMs, 0) != 0)
             {
-                stallStartMs = 0;
                 try { if (File.Exists(PathJson)) File.Delete(PathJson); } catch { }
             }
         }
 
         static void Probe()
         {
+            // System.Threading.Timer does not wait for the previous callback,
+            // and pass 2 of the window scan can block on a window whose thread
+            // is slow to pump — without this guard the ticks pile up.
+            if (Interlocked.CompareExchange(ref probeInFlight, 1, 0) != 0) return;
             try
             {
+                var gen = Volatile.Read(ref resumeGen);
                 var now = Now();
                 var stalled = now - Interlocked.Read(ref lastMainMs);
                 if (stalled < StallMs) return;
-                if (stallStartMs == 0) stallStartMs = now - stalled;
+                Interlocked.CompareExchange(ref stallStartMs, now - stalled, 0);
                 var title = ModalTitleIfAny();
                 var b = new Blocked
                 {
                     kind = title != null ? "modal" : "main-thread-stalled",
                     title = title,
-                    sinceMs = stallStartMs,
+                    sinceMs = Interlocked.Read(ref stallStartMs),
                     threadHeartbeatMs = now,
                     mainStalledMs = stalled,
                 };
@@ -75,13 +88,26 @@ namespace UnityAgentKit.Doctor
                 File.WriteAllText(PathJson + ".tmp", JsonUtility.ToJson(b));
                 if (File.Exists(PathJson)) File.Delete(PathJson);
                 File.Move(PathJson + ".tmp", PathJson);
+                // The main thread woke while this probe was composing, so
+                // MainThreadAlive's delete has already run and missed us. Left
+                // alone the file would report a finished stall as live until
+                // the reader's 3 s freshness gate expired.
+                if (Volatile.Read(ref resumeGen) != gen)
+                {
+                    try { if (File.Exists(PathJson)) File.Delete(PathJson); } catch { }
+                }
             }
             catch { /* a probe that fails is retried next period */ }
+            finally { Volatile.Write(ref probeInFlight, 0); }
         }
 
         static long Now() => DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
 #if UNITY_EDITOR_WIN
+        // Only the window scan needs it, so it lives with the scan: a
+        // file-scope field would be CS0414 dead weight on every other platform.
+        static int pid;
+
         delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
         [DllImport("user32.dll")] static extern bool EnumWindows(EnumWindowsProc cb, IntPtr lParam);
         [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr hWnd);
