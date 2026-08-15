@@ -11,6 +11,8 @@ const ERROR_TYPES = new Set(['Error', 'Exception', 'Assert']);
 export function readConsole(root, { errors = false, sinceEpoch = -1, last = 0 } = {}) {
   let text;
   try { text = readFileSync(consolePath(root), 'utf8'); } catch { return []; }
+  // A BOM-writing appender would make the first line unparseable forever.
+  if (text.charCodeAt(0) === 0xfeff) text = text.slice(1);
   const out = [];
   for (const line of text.split('\n')) {
     if (!line.trim()) continue;

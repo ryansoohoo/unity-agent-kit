@@ -25,6 +25,13 @@ test('readConsole: parses lines, skips a torn tail, filters errors / sinceEpoch 
   assert.equal(readConsole(p, { errors: true })[1].stack, 'at Foo.Bar()');
 });
 
+test('readConsole: a leading BOM does not eat the first entry', () => {
+  const p = tmp('uak-con-');
+  mkdirSync(dirname(consolePath(p)), { recursive: true });
+  writeFileSync(consolePath(p), '\uFEFF' + JSON.stringify(e(1, 'Error', 'first')) + '\n');
+  assert.deepEqual(readConsole(p).map(x => x.message), ['first']);
+});
+
 test('clearConsole truncates and creates', () => {
   const p = tmp('uak-con-');
   clearConsole(p);
