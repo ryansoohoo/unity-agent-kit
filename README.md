@@ -55,6 +55,11 @@ Other flags (same for both forms above):
 - `--epoch` — print the v2 reload-boundary signal as JSON and exit 0 (see the Kanabō section)
 - `--wait-ready [--since-epoch N] [--timeout-ms M] [--poll-ms P]` — block (bounded!) until the editor signal is fresh+ready; exit 0 on ready, 1 with a JSON reason otherwise
 
+Editor actions (v3) — verbs, taking the same project root:
+- `kit invoke <root> --menu "<MenuItem path>" | --method Ns.Type.Method [--arg v]…` — run editor code, get its console lines back (exit 0 = ran, 1 = error/timeout/blocked, 3 = no editor)
+- `kit console <root> [--errors] [--since-epoch N] [--last N] [--clear]` — structured console from `Temp/unity-agent-kit/console.jsonl`; `--clear` truncates the mirror
+- `--epoch` now reports `blocked` (naming the modal's title when one is up) and `--wait-ready` exits with reason `"blocked"` for that case — a merely stalled main thread (long import) stays visible on `--epoch` but does not abort the wait
+
 Exit code is `1` if and only if at least one check is failing; `0` otherwise.
 
 ### Door 2: Claude Code plugin
@@ -129,7 +134,8 @@ suite that proves the fix, not just a re-check of the same detect logic.
 | `audit` | Scans local Claude Code transcripts for Unity failure signatures; ranked triage with confidence, `file:line` links, and per-session token/retry tallies. Local-only: uploads nothing. See "Daily sweep" below. |
 | `skill-lint` | Four dimensions across installed skills: description form (resting token cost, "Use when" firing conditions, negative triggers, overlap between two skills), near-duplicate paragraphs shared between two bodies, vocabulary discipline (one content term claimed by two skills, polysemous terms with no disambiguator), and environment contracts (machine numbers not marked "measured", CLI flags outside the adjudicated allowlist). |
 | `orphans` | Extra Unity.exe processes, orphaned dotnet compile servers, stale `Temp/UnityLockfile`, locked git worktrees. Lists PIDs; killing anything stays a human decision. |
-| `kanabo` | The v2 reload-boundary signal as a doctor row: reports the live epoch/state from `Temp/unity-agent-kit/epoch.json` when the editor is running the kit's UPM package. Detect-only, `pass`/`na` — an idle or absent editor is a state, not a defect. |
+| `kanabo` | The v2 reload-boundary signal as a doctor row: reports the live epoch/state from `Temp/unity-agent-kit/epoch.json` when the editor is running the kit's UPM package. Detect-only, `pass`/`warn`/`na` — an idle or absent editor is a state, not a defect, but an editor sitting behind a modal is a `warn` that names the dialog's title, since nothing else will move until a human dismisses it. A stalled main thread with no modal (a long import) stays `pass`. |
+| `pipeline` | Informational: is `com.unity.pipeline` installed, and is an editor reachable through it? `na` when the package isn't in `Packages/manifest.json`, `warn` when it's installed but the `unity` CLI is missing or no editor answers, `pass` with the live status line otherwise. Detect-only, never `fail` — this row is how you tell whether Tier 0 verification exists at all: Tier 0 exists only when this row is green. |
 
 Proof results persist to `.unity-agent-kit/verify.json` in the target repo:
 if the last real-merge proof FAILED, the doctor shows `warn` even though the

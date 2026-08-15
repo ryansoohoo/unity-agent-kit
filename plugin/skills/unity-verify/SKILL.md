@@ -63,12 +63,11 @@ epoch bump, the compile almost certainly FAILED — stop waiting and read the
 console: `kit console --errors --since-epoch <pre-edit epoch>` (structured,
 from Temp/unity-agent-kit/console.jsonl); the file fallback is the PROJECT's
 `Logs/Editor.log` — NOT %LOCALAPPDATA%\Unity\Editor\Editor.log, which is a
-stale rotated copy that has misled agents. Read it instead of running out the
-deadline. Caveat: a
-bump proves a reload happened after your capture, not that it contains YOUR
-edit — trustworthy only when you are the sole import trigger; with a human
-also using the editor, verify content (eval a probe) or wait for a second
-bump / a worldRevision advance.
+stale rotated copy that has misled agents. Read it instead of running out
+the deadline. Caveat: a bump proves a reload happened after your capture,
+not that it contains YOUR edit — trustworthy only when you are the sole
+import trigger; with a human also using the editor, verify content (eval a
+probe) or wait for a second bump / a worldRevision advance.
 
 ## Running editor code yourself
 You can run any [MenuItem] or static editor method without a human click:
