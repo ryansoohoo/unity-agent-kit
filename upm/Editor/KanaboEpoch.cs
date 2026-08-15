@@ -55,6 +55,7 @@ namespace UnityAgentKit.Doctor
             if (AssetDatabase.IsAssetImportWorkerProcess()) return;
             try
             {
+                KitConsole.Install();
                 Pid = System.Diagnostics.Process.GetCurrentProcess().Id;
                 // The static ctor reruns after EVERY domain reload — that IS the epoch.
                 Epoch = SessionState.GetInt("uak.epoch", 0) + 1;
