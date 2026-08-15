@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, writeFileSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { epochPath } from '../src/kanabo.js';
+import { epochPath, blockedPath } from '../src/kanabo.js';
 import { reqDir, resDir, newId, writeRequest, readResult, awaitResult } from '../src/actions.js';
 import { tmp } from './tmp.js';
 
@@ -69,7 +69,8 @@ test('awaitResult: no-editor when the heartbeat is never fresh; timeout when fre
 });
 
 test('awaitResult: blocked when the epoch snapshot carries a blocked field', async () => {
-  const p = proj(); fresh(p, { blocked: { kind: 'modal', title: 'API Update Required', sinceMs: Date.now() - 5000 } });
+  const p = proj(); fresh(p);
+  writeFileSync(blockedPath(p), JSON.stringify({ kind: 'modal', title: 'API Update Required', sinceMs: Date.now() - 5000, threadHeartbeatMs: Date.now(), mainStalledMs: 5000 }));
   const id = writeRequest(p, 'invoke', {});
   const r = await awaitResult(p, id, { timeoutMs: 100, pollMs: 20 });
   assert.equal(r.reason, 'blocked'); assert.equal(r.snap.blocked.title, 'API Update Required');

@@ -8,13 +8,27 @@ import { join, dirname } from 'node:path';
 // through — is when every socket and HTTP port is dead. Files aren't.
 export const epochPath = (root) => join(root, 'Temp', 'unity-agent-kit', 'epoch.json');
 export const requestPath = (root) => join(root, 'Temp', 'unity-agent-kit', 'refresh.request');
+export const blockedPath = (root) => join(root, 'Temp', 'unity-agent-kit', 'blocked.json');
 
 const HEARTBEAT_FRESH_MS = 3000; // 6x the writer's 500 ms cadence
+
+// blocked.json is written by a BACKGROUND thread in the editor (KitBlocked.cs)
+// precisely because the main thread — the one that writes epoch.json — is the
+// thing that stalled (modal dialog, synchronous import). Fresh = its own
+// heartbeat is recent; the main-thread heartbeat is stale by construction.
+function readBlocked(root, now = Date.now()) {
+  try {
+    const b = JSON.parse(readFileSync(blockedPath(root), 'utf8'));
+    if (!b || typeof b !== 'object' || typeof b.threadHeartbeatMs !== 'number') return null;
+    return now - b.threadHeartbeatMs < HEARTBEAT_FRESH_MS ? b : null;
+  } catch { return null; }
+}
 
 export function readEpoch(root) {
   try {
     const s = JSON.parse(readFileSync(epochPath(root), 'utf8'));
     if (!s || typeof s !== 'object' || typeof s.epoch !== 'number') return null;
+    s.blocked = readBlocked(root);
     return s;
   } catch { return null; } // missing or torn mid-write: the poller just retries
 }
@@ -34,12 +48,15 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // The anti-blind-sleep primitive: a BOUNDED poll with an explicit outcome.
 // Never throws; never waits past timeoutMs (+ at most one poll interval);
-// reason says WHY it stopped: 'ready' | 'timeout' | 'no-editor'.
+// reason says WHY it stopped: 'ready' | 'timeout' | 'no-editor' | 'blocked'.
 export async function waitReady(root, { sinceEpoch = -1, requireEpochBump = false, timeoutMs = 120000, pollMs = 250 } = {}) {
   const started = Date.now();
   let sawEditor = false;
   for (;;) {
     const snap = readEpoch(root);
+    if (snap && snap.blocked) {
+      return { ok: false, reason: 'blocked', epoch: snap.epoch, worldRevision: snap.worldRevision ?? 0, waitedMs: Date.now() - started, snap };
+    }
     if (snap && isFresh(snap)) {
       sawEditor = true;
       const bumped = snap.epoch > sinceEpoch;
