@@ -56,6 +56,7 @@ namespace UnityAgentKit.Doctor
             try
             {
                 KitConsole.Install();
+                KitBlocked.Install();
                 Pid = System.Diagnostics.Process.GetCurrentProcess().Id;
                 // The static ctor reruns after EVERY domain reload — that IS the epoch.
                 Epoch = SessionState.GetInt("uak.epoch", 0) + 1;
@@ -89,6 +90,10 @@ namespace UnityAgentKit.Doctor
 
         static void Tick()
         {
+            // Every frame, ahead of the heartbeat throttle: the stall detector
+            // needs proof the main thread is running, not proof it wrote a file.
+            KitBlocked.MainThreadAlive();
+
             var now = EditorApplication.timeSinceStartup;
             if (now - lastWrite < HeartbeatSeconds) return;
 
