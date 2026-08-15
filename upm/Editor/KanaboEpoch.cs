@@ -7,15 +7,14 @@ using UnityEngine;
 
 namespace UnityAgentKit.Doctor
 {
-    // Kanabō (v2, minimal): the reload-boundary correctness signal.
-    // Writes <project>/Temp/unity-agent-kit/epoch.json — epoch (per domain
-    // reload), 0.5 s heartbeat, compile/reload state, asset world-revision,
-    // and the reflected UAK.EpochProbe.Value used by the proof harness.
-    // Also answers Temp/unity-agent-kit/refresh.request with
-    // AssetDatabase.Refresh() — the explicit import trigger that works with
-    // the editor unfocused or headless.
-    // ZERO tool surface by design: no scene ops, no eval, no serializers.
-    // A status file out, one refresh verb in. That's all this will ever be.
+    // Kanabō: the reload-boundary correctness signal, plus (v3) the file
+    // request channel it pumps. Writes <project>/Temp/unity-agent-kit/epoch.json —
+    // epoch (per domain reload), 0.5 s heartbeat, compile/reload state, asset
+    // world-revision — answers refresh.request with AssetDatabase.Refresh(),
+    // and hands req/*.json to KitActions (invoke). Console mirroring lives in
+    // KitConsole; the stalled-main-thread detector in KitBlocked.
+    // Deliberately SMALL: a status file out, a handful of verbs in, no scene
+    // serializers, no property-by-path — write an editor script and invoke it.
     [InitializeOnLoad]
     public static class KanaboEpoch
     {
@@ -27,6 +26,7 @@ namespace UnityAgentKit.Doctor
         static readonly string RequestPath = Path.Combine(Dir, "refresh.request");
 
         static readonly int Epoch;
+        internal static int CurrentEpoch => Epoch;
         static readonly int Pid;
         static string state = "ready";
         static double lastWrite;
@@ -108,6 +108,8 @@ namespace UnityAgentKit.Doctor
                 }
             }
             catch { /* a torn request is retried on the next tick */ }
+
+            KitActions.Pump();
 
             var busy = EditorApplication.isCompiling || EditorApplication.isUpdating;
             if (state != "reloading")
