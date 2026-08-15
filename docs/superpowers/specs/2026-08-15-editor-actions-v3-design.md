@@ -22,8 +22,8 @@ Game view in Play, drops its token across the Play domain reload, and is blocked
 by [Vindler](https://vindler.solutions/blog/unity-cli-agent-automation); the kit's file channel is the
 residual). `add-package` verb (one `invoke` line once invoke exists — add it only if it bites twice).
 
-**Ceilings honoured (Kintarō `docs/kanabo/KILL-CRITERIA.md`):** under ten verbs (this adds 3: `invoke`,
-`play`, `console`); editor-side well under 2000 lines; one Unity line (6000.x, Input System 1.x); no
+**Ceilings honoured (Kintarō `docs/kanabo/KILL-CRITERIA.md`):** under ten verbs (this adds 4: `invoke`,
+`play`, `test`, `console`); editor-side well under 2000 lines; one Unity line (6000.x, Input System 1.x); no
 sidecar. The KanaboEpoch.cs "zero tool surface, that's all this will ever be" comment is rewritten
 honestly, not left lying.
 
@@ -102,10 +102,31 @@ Probe path grammar: `GameObjectPath/transform.field` or `GameObjectPath.Namespac
 `{ ok, inputTier, seconds, summary:{errors, exceptions, expectsFailed, stepsRun}, probes:{path:[[t,value]…]}, expects:[{at,probe,op,want,got,pass}], matches:[{t,frame,type,msg}], console:[…kept], snapshots:[{t,hierarchy}], screenshots:[relpath…], warnings:[…] }`.
 `ok` = no exceptions ∧ all expects pass ∧ (errors allowed unless `--fail-on-errors`). CLI prints a compact summary; `--json` dumps all. Deterministic check is a CLI convenience: `kit play … --repeat 2` hashes each run's `probes` and reports `deterministic: true|false`.
 
-### 4.3 `kit console`
+**Test-style verdicts (the outcome is read, not eyeballed).** Every `expect` has a `name`
+(default `"<probe> <op> <want> @<at>s"`); the run itself is a test suite. Three readable outputs:
+1. **stdout** in TAP form — `ok 1 - player falls off edge`, `not ok 2 - camera converges # got 3.9 want <1`,
+   `1..N`, then a one-line summary; exit code 0/1 mirrors it (so `kit play` composes with any runner).
+2. **Unity console**: the driver logs `[UAK-TEST] PASS <name>` / `[UAK-TEST] FAIL <name>: got … want …` and
+   a final `[UAK-TEST] SUITE <passed>/<total>` line — visible in `kit console`, `Logs/Editor.log`, and to a
+   human watching, so console output alone tells the story.
+3. **JUnit XML** at `<out>/junit.xml` next to the JSON — the format CI and IDEs already read.
+Games can also *self-report*: any console line matching `^\[TEST\] (PASS|FAIL) (.+)` (regex configurable via
+`console.testPattern`) is lifted into the same suite as a case — so a project's own runtime self-test
+(Kintarō's `[SelfTest] DIVERGED`) becomes a pass/fail row without an `expect`.
+
+### 4.3 `kit test` — Unity Test Framework through the same channel
+`kit test [--mode edit|play] [--filter Regex] [--category C]`. Editor: `TestRunnerApi.Execute` with a
+callback that writes JUnit XML + JSON per test (name, result, duration, message, first stack line) to
+`res/<id>.json` and `<out>/junit.xml`; TAP to stdout; exit 0/1. If `com.unity.test-framework` is
+absent the verb errors with the one-line manifest fix and doctor shows an informational check. Play-mode
+runs survive their domain reloads because the runner callback persists results incrementally to
+`res/<id>.progress.json`. This makes "write a play-mode test, run it, read it" a zero-human loop and
+gives the `play` verb's ad-hoc scripts a graduation path into committed tests.
+
+### 4.4 `kit console`
 `kit console [--errors] [--since-epoch E] [--last N] [--clear]`. Editor keeps a ring buffer (default 2000) of `Application.logMessageReceived` entries tagged with epoch, frame, time, type, message, first stack line — persisted to `Temp/unity-agent-kit/console.jsonl` on each write so it survives domain reload and the CLI can read it *even when the editor is mid-reload*. Result = the filtered entries. Also documents that the authoritative log file is `<project>/Logs/Editor.log`, not `%LOCALAPPDATA%\Unity\Editor\Editor.log`.
 
-### 4.4 `blocked` in the epoch signal
+### 4.5 `blocked` in the epoch signal
 Detection: `EditorApplication.update` stopped ticking (heartbeat writer is on `update`) → replaced by a *thread* heartbeat: a background timer stamps `threadHeartbeatMs` every 500 ms while the main-thread `Tick` stamps `heartbeatMs`. Thread alive + main-thread stale ≥ 2 s + `!isCompiling && !isUpdating` ⇒ main thread is in a modal pump; on Windows the foreground window title is read via `GetForegroundWindow/GetWindowText` when it belongs to the editor PID → `blocked:{kind:"modal", title}`. Otherwise `blocked:{kind:"main-thread-stalled"}`. `--wait-ready` surfaces it in `reason: "blocked"` with the title. No auto-dismiss in v3 (consent design later); the *diagnosis* was the missing piece.
 
 ## 5. Doctor additions
@@ -114,12 +135,12 @@ Detection: `EditorApplication.update` stopped ticking (heartbeat writer is on `u
 - Existing orphan-Unity check gets a note that orphans are harmless to the file channel (pid in snapshot disambiguates).
 
 ## 6. Skill layer — the agent must know it can do this
-- `unity-verify`: new Tier 3 "behavioural check": `kit play` with probes/expects; state plainly *"you can enter Play, feed scripted input, sample state, and read the console yourself — do not ask the human to play-test simple things"*; note Tier 1 (`dotnet build`) only covers files Unity already imported; name `Logs/Editor.log`.
+- `unity-verify`: new Tier 3 "behavioural check": `kit test` for committed tests, `kit play` for ad-hoc scripted checks — both read as PASS/FAIL; state plainly *"you can enter Play, feed scripted input, sample state, and read the console yourself — do not ask the human to play-test simple things"*; note Tier 1 (`dotnet build`) only covers files Unity already imported; name `Logs/Editor.log`.
 - `unity-recipes`: recipes "run my editor script" (`invoke`), "play test with a script" (probe-first, screenshot on failure), "read the console structurally", "editor stuck? read `blocked`".
 - Description/trigger evals for the changed skills re-run through the existing harness (`scripts/skill-evals.mjs`), gated on the held-out set as before.
 
 ## 7. Testing
-- **JS (node:test, no Unity):** request/result file protocol round-trip with a fake editor; bounded wait reason codes; script JSON validation with precise errors; probe series hashing; CLI exit codes.
+- **JS (node:test, no Unity):** request/result file protocol round-trip with a fake editor; TAP/JUnit emitters from a fixed result JSON; bounded wait reason codes; script JSON validation with precise errors; probe series hashing; CLI exit codes.
 - **Editor-side proof (live editor, recorded in BUILD-LEDGER like the 100/100 epoch proof):** `invoke` a menu item and a static method 20/20; `play` a kit-shipped fixture scene (`upm/Tests~/UakPlayFixture.unity`: a cube moved by Input System `Move`, a uGUI button that logs on click) — expects on position, `click` on the button, one screenshot — 20/20 across editor focused/unfocused; console ring survives a domain reload; `blocked` detected against a deliberately opened `EditorUtility.DisplayDialog`.
 - **Acceptance (the point):** Kintarō Tasks 6–8 human steps re-run agent-side — build sandbox via `invoke`; play test with WASD/mouse script + probes (camera-relative move, aim, fall off edge, console clean); rollback self-test via `--repeat 2` determinism + `[SelfTest]` matches (with `SelfTestEnabled` toggled through an `invoke`d one-line editor method, saved); F1/F2/F3 frame-rate independence via probe speed comparison. Zero human steps = pass.
 
