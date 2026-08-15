@@ -19,6 +19,21 @@ namespace UnityAgentKit.Doctor
         static readonly string ReqDir = Path.Combine(Root, "req");
         static readonly string ResDir = Path.Combine(Root, "res");
 
+        // A request older than this is answered with an error instead of being
+        // run: the CLI's wait is bounded, so a request the editor picks up long
+        // after that deadline is one the caller already gave up on — executing
+        // it would double-fire whatever the caller retried in the meantime.
+        const long RequestTtlMs = 600000; // 10 minutes
+
+        // Spec §3's reload-survival contract: a domain reload in the middle of a
+        // dispatch kills the frame without a result, and the CLI would wait out
+        // its whole timeout for an answer that can never come. The id is stashed
+        // in SessionState (which survives the reload) before dispatch and cleared
+        // after the result is written; the first Pump on the new domain turns any
+        // leftover into an explicit "interrupted" result.
+        const string InflightKey = "uak.inflight";
+        static bool checkedInflight;
+
         [Serializable] class LogLine { public string type; public string message; public string stack; }
         [Serializable] class Result
         {
@@ -26,10 +41,21 @@ namespace UnityAgentKit.Doctor
             public int startedEpoch; public int finishedEpoch;
             public List<LogLine> log = new List<LogLine>();
         }
-        [Serializable] class Request { public string id; public string verb; public string menu; public string method; public string[] args; }
+        [Serializable] class Request { public string id; public string verb; public string menu; public string method; public string[] args; public long requestedMs; }
 
         internal static void Pump()
         {
+            if (!checkedInflight)
+            {
+                checkedInflight = true;
+                var stranded = SessionState.GetString(InflightKey, "");
+                SessionState.EraseString(InflightKey);
+                if (!string.IsNullOrEmpty(stranded))
+                {
+                    var e = KanaboEpoch.CurrentEpoch;
+                    Write(new Result { id = stranded, ok = false, startedEpoch = e, finishedEpoch = e, error = $"interrupted by domain reload at epoch {e}" });
+                }
+            }
             string[] files;
             try { if (!Directory.Exists(ReqDir)) return; files = Directory.GetFiles(ReqDir, "*.json"); }
             catch { return; }
@@ -41,7 +67,15 @@ namespace UnityAgentKit.Doctor
                 try { req = JsonUtility.FromJson<Request>(File.ReadAllText(f)); File.Delete(f); }
                 catch { continue; } // torn: the CLI renames atomically, so this is a retry-next-tick, not a loss
                 if (req == null || string.IsNullOrEmpty(req.id)) continue;
+                var ageMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - req.requestedMs;
+                if (req.requestedMs > 0 && ageMs > RequestTtlMs)
+                {
+                    var e = KanaboEpoch.CurrentEpoch;
+                    Write(new Result { id = req.id, ok = false, startedEpoch = e, finishedEpoch = e, error = $"request expired (age {ageMs / 1000} s) — not executed" });
+                    continue;
+                }
                 var res = new Result { id = req.id, startedEpoch = KanaboEpoch.CurrentEpoch };
+                SessionState.SetString(InflightKey, req.id);
                 Application.LogCallback capture = (msg, stack, type) =>
                     res.log.Add(new LogLine { type = type.ToString(), message = msg, stack = FirstLine(stack) });
                 Application.logMessageReceived += capture;
@@ -57,6 +91,7 @@ namespace UnityAgentKit.Doctor
                 finally { Application.logMessageReceived -= capture; }
                 res.finishedEpoch = KanaboEpoch.CurrentEpoch;
                 Write(res);
+                SessionState.EraseString(InflightKey);
             }
         }
 

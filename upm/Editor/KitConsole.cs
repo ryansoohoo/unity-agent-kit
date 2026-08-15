@@ -23,6 +23,11 @@ namespace UnityAgentKit.Doctor
         static readonly Encoding Utf8NoBom = new UTF8Encoding(false);
         static int writesSinceTrim;
         static bool installed;
+        // Time.frameCount is a main-thread-only API, but OnLog runs on whatever
+        // thread logged. Sampled once per editor update and read as a plain int
+        // off-thread — a frame or two stale at worst, which is all the field is
+        // for (ordering entries within a session, not exact timing).
+        static int lastFrame;
 
         [Serializable] class Entry { public int epoch; public int frame; public long timeMs; public string type; public string message; public string stack; }
 
@@ -31,7 +36,7 @@ namespace UnityAgentKit.Doctor
             if (installed) return;
             installed = true;
             Application.logMessageReceivedThreaded += OnLog;
-            EditorApplication.update += MaybeTrim;
+            EditorApplication.update += OnUpdate;
         }
 
         static void OnLog(string message, string stack, LogType type)
@@ -41,7 +46,7 @@ namespace UnityAgentKit.Doctor
                 var e = new Entry
                 {
                     epoch = KanaboEpoch.CurrentEpoch,
-                    frame = Time.frameCount, // safe to read off-thread; may be stale, that's fine
+                    frame = lastFrame,
                     timeMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
                     type = type.ToString(),
                     message = message ?? "",
@@ -56,6 +61,14 @@ namespace UnityAgentKit.Doctor
                 }
             }
             catch { /* the console must never break because of its mirror */ }
+        }
+
+        // The only main-thread tick this class has: sample the frame counter for
+        // the threaded callback, then do the periodic trim.
+        static void OnUpdate()
+        {
+            lastFrame = Time.frameCount;
+            MaybeTrim();
         }
 
         static void MaybeTrim()
