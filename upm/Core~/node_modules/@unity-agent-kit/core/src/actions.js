@@ -42,10 +42,11 @@ export async function awaitResult(root, id, { timeoutMs = 120000, pollMs = 250 }
     const result = readResult(root, id);
     const snap = readEpoch(root);
     if (result) return { ok: result.ok === true, reason: 'done', result, snap, waitedMs: Date.now() - started };
-    if (snap && isFresh(snap)) {
-      sawEditor = true;
-      if (snap.blocked) return { ok: false, reason: 'blocked', result: null, snap, waitedMs: Date.now() - started };
-    }
+    // Ahead of the freshness gate on purpose: blocked.json only exists when the
+    // MAIN thread stalled, so the epoch heartbeat is stale by construction. Gating
+    // this on isFresh would report 'no-editor' for the case it is meant to name.
+    if (snap && snap.blocked) return { ok: false, reason: 'blocked', result: null, snap, waitedMs: Date.now() - started };
+    if (snap && isFresh(snap)) sawEditor = true;
     if (Date.now() - started >= timeoutMs) {
       return { ok: false, reason: sawEditor ? 'timeout' : 'no-editor', result: null, snap: snap ?? null, waitedMs: Date.now() - started };
     }
