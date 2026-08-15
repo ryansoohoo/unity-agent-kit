@@ -1,10 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { writeFileSync, mkdirSync } from 'node:fs';
+import { writeFileSync, mkdirSync, readdirSync, readFileSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { tmp } from '../../core/test/tmp.js';
+import { epochPath, blockedPath } from '../../core/src/kanabo.js';
+import { reqDir, resDir } from '../../core/src/actions.js';
+import { consolePath } from '../../core/src/console.js';
 
 const BIN = join(dirname(fileURLToPath(import.meta.url)), '..', 'bin', 'kit.js');
 
@@ -157,4 +160,86 @@ test('--wait-ready: a non-numeric option value exits 2 instead of waiting foreve
   })();
   assert.equal(r.code, 2, r.out);
   assert.match(r.out, /--timeout-ms/);
+});
+
+function freshEditor(dir) {
+  mkdirSync(join(dir, 'Temp', 'unity-agent-kit'), { recursive: true });
+  writeFileSync(epochPath(dir), JSON.stringify({ schema: 1, pid: 1, sessionId: 'x', epoch: 9, heartbeatMs: Date.now(), state: 'ready', worldRevision: 0 }));
+}
+
+test('invoke: usage error without --menu/--method (exit 2), no request written', () => {
+  const dir = tmp('uak-');
+  const r = run(['invoke', dir], dir);
+  assert.equal(r.code, 2);
+  assert.match(r.out, /--menu .* or --method/);
+  assert.equal(existsSync(reqDir(dir)), false, 'no request written on a usage error');
+});
+
+test('invoke: no editor → exit 3 and the request file is left for a later editor to find', () => {
+  const dir = tmp('uak-');
+  const r = run(['invoke', dir, '--menu', 'Tools/Foo', '--timeout-ms', '150', '--json'], dir);
+  assert.equal(r.code, 3);
+  const j = JSON.parse(r.out);
+  assert.equal(j.reason, 'no-editor');
+  const req = JSON.parse(readFileSync(join(reqDir(dir), readdirSync(reqDir(dir))[0]), 'utf8'));
+  assert.equal(req.verb, 'invoke'); assert.equal(req.menu, 'Tools/Foo');
+});
+
+// The fake editor has to be its own PROCESS, not a setInterval in this one:
+// run() is execFileSync, which blocks this thread until the CLI child exits,
+// so an in-process timer could never fire while the CLI is polling.
+const FAKE_EDITOR = `
+const { readdirSync, readFileSync, writeFileSync, mkdirSync } = require('node:fs');
+const { join } = require('node:path');
+const [req, res] = process.argv.slice(1);
+const t = setInterval(() => {
+  let files = [];
+  try { files = readdirSync(req).filter(f => f.endsWith('.json')); } catch { return; }
+  if (!files.length) return;
+  const r = JSON.parse(readFileSync(join(req, files[0]), 'utf8'));
+  mkdirSync(res, { recursive: true });
+  writeFileSync(join(res, r.id + '.json'), JSON.stringify({ id: r.id, ok: true, log: [{ type: 'Log', message: 'ran' }], startedEpoch: 9, finishedEpoch: 9 }));
+  clearInterval(t);
+}, 25);
+setTimeout(() => clearInterval(t), 15000).unref();
+`;
+
+test('invoke --method: request carries method + args; a fake editor answer yields exit 0 and the log', () => {
+  const dir = tmp('uak-'); freshEditor(dir);
+  const editor = spawn(process.execPath, ['-e', FAKE_EDITOR, reqDir(dir), resDir(dir)], { stdio: 'ignore' });
+  try {
+    const r = run(['invoke', dir, '--method', 'Ns.Type.Run', '--arg', '1', '--arg', 'two', '--timeout-ms', '10000', '--json'], dir);
+    assert.equal(r.code, 0, r.out);
+    assert.equal(JSON.parse(r.out).result.log[0].message, 'ran');
+    // the request the CLI actually wrote (the fake editor leaves it in place)
+    const req = JSON.parse(readFileSync(join(reqDir(dir), readdirSync(reqDir(dir))[0]), 'utf8'));
+    assert.equal(req.method, 'Ns.Type.Run'); assert.deepEqual(req.args, ['1', 'two']);
+  } finally { editor.kill(); }
+});
+
+test('invoke: blocked editor → exit 1 with the modal title in the JSON', () => {
+  const dir = tmp('uak-'); freshEditor(dir);
+  writeFileSync(blockedPath(dir), JSON.stringify({ kind: 'modal', title: 'API Update Required', sinceMs: Date.now() - 4000, threadHeartbeatMs: Date.now(), mainStalledMs: 4000 }));
+  const r = run(['invoke', dir, '--menu', 'X', '--timeout-ms', '500', '--json'], dir);
+  assert.equal(r.code, 1);
+  const j = JSON.parse(r.out);
+  assert.equal(j.reason, 'blocked'); assert.equal(j.snap.blocked.title, 'API Update Required');
+});
+
+test('console: reads, filters, clears', () => {
+  const dir = tmp('uak-');
+  mkdirSync(join(dir, 'Temp', 'unity-agent-kit'), { recursive: true });
+  writeFileSync(consolePath(dir), [
+    { epoch: 3, frame: 1, timeMs: 1, type: 'Log', message: 'hello', stack: '' },
+    { epoch: 4, frame: 2, timeMs: 2, type: 'Error', message: 'boom', stack: 'at A.B()' },
+  ].map(x => JSON.stringify(x)).join('\n') + '\n');
+  let r = run(['console', dir], dir);
+  assert.equal(r.code, 0); assert.match(r.out, /\[Log\] e3 f1 hello/); assert.match(r.out, /\[Error\] e4 f2 boom\n\s+at A\.B\(\)/);
+  r = run(['console', dir, '--errors', '--json'], dir);
+  assert.deepEqual(JSON.parse(r.out).map(x => x.message), ['boom']);
+  r = run(['console', dir, '--since-epoch', '4', '--last', '1', '--json'], dir);
+  assert.equal(JSON.parse(r.out).length, 1);
+  r = run(['console', dir, '--clear'], dir);
+  assert.match(r.out, /console cleared/);
+  assert.equal(readFileSync(consolePath(dir), 'utf8'), '');
 });
