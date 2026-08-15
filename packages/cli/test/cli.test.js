@@ -183,6 +183,10 @@ test('invoke: no editor → exit 3 and the request file is left for a later edit
   assert.equal(j.reason, 'no-editor');
   const req = JSON.parse(readFileSync(join(reqDir(dir), readdirSync(reqDir(dir))[0]), 'utf8'));
   assert.equal(req.verb, 'invoke'); assert.equal(req.menu, 'Tools/Foo');
+  // the human line must name the TTL, not just "left in req": a request an
+  // editor picks up 10+ min later is dropped, not run.
+  const human = run(['invoke', dir, '--menu', 'Tools/Foo', '--timeout-ms', '150'], dir);
+  assert.match(human.out, /expired/);
 });
 
 // The fake editor has to be its own PROCESS, not a setInterval in this one:

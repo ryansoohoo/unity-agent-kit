@@ -6,7 +6,7 @@ import { getCheck } from '@unity-agent-kit/core/src/registry.js';
 import { undoAll } from '@unity-agent-kit/core/src/audit.js';
 import { readEpoch, isFresh, waitReady } from '@unity-agent-kit/core/src/kanabo.js';
 import { writeRequest, awaitResult } from '@unity-agent-kit/core/src/actions.js';
-import { readConsole, clearConsole } from '@unity-agent-kit/core/src/console.js';
+import { readConsole, clearConsole, ERROR_TYPES } from '@unity-agent-kit/core/src/console.js';
 import readline from 'node:readline/promises';
 
 const VERBS = ['invoke', 'console'];
@@ -42,10 +42,10 @@ if (verb === 'invoke') {
   const r = await awaitResult(ctx.root, id, { timeoutMs: num('--timeout-ms', 120000), pollMs: num('--poll-ms', 250) });
   if (flag('--json')) console.log(JSON.stringify({ id, ...r }, null, 2));
   else if (r.reason === 'done') {
-    console.log(r.ok ? `invoke ok (epoch ${r.result.startedEpoch}→${r.result.finishedEpoch})` : `invoke FAILED: ${r.result.error}`);
+    console.log(r.ok ? `invoke ok (epoch ${r.result.startedEpoch}→${r.result.finishedEpoch})` : `invoke FAILED: ${r.result.error ?? 'no error reported'}`);
     for (const l of r.result.log ?? []) console.log(`  [${l.type}] ${l.message}${l.stack ? `\n      ${l.stack}` : ''}`);
   } else if (r.reason === 'blocked') console.log(`editor BLOCKED: ${r.snap.blocked.kind}${r.snap.blocked.title ? ` "${r.snap.blocked.title}"` : ''} — dismiss it, then retry`);
-  else console.log(`invoke ${r.reason} after ${r.waitedMs} ms (request ${id} left in Temp/unity-agent-kit/req)`);
+  else console.log(`invoke ${r.reason} after ${r.waitedMs} ms (request ${id} is in Temp/unity-agent-kit/req — an editor that finds it still runs it, but it will be dropped as expired after 10 min)`);
   process.exit(r.ok ? 0 : r.reason === 'no-editor' ? 3 : 1);
 }
 
@@ -56,7 +56,7 @@ if (verb === 'console') {
   else {
     for (const e of entries) {
       console.log(`[${e.type}] e${e.epoch} f${e.frame} ${e.message}`);
-      if (e.stack && /^(Error|Exception|Assert)$/.test(e.type)) console.log(`    ${e.stack}`);
+      if (e.stack && ERROR_TYPES.has(e.type)) console.log(`    ${e.stack}`);
     }
     if (!entries.length) console.log('(no console entries — is the kit UPM package installed and the editor open?)');
   }

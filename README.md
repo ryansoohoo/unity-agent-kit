@@ -56,11 +56,11 @@ Other flags (same for both forms above):
 - `--wait-ready [--since-epoch N] [--timeout-ms M] [--poll-ms P]` — block (bounded!) until the editor signal is fresh+ready; exit 0 on ready, 1 with a JSON reason otherwise
 
 Editor actions (v3) — verbs, taking the same project root:
-- `kit invoke <root> --menu "<MenuItem path>" | --method Ns.Type.Method [--arg v]…` — run editor code, get its console lines back (exit 0 = ran, 1 = error/timeout/blocked, 3 = no editor)
+- `kit invoke <root> --menu "<MenuItem path>" | --method Ns.Type.Method [--arg v]…` — run editor code, get its console lines back (exit 0 = ran, 1 = error/timeout/blocked, 2 = usage error, 3 = no editor)
 - `kit console <root> [--errors] [--since-epoch N] [--last N] [--clear]` — structured console from `Temp/unity-agent-kit/console.jsonl`; `--clear` truncates the mirror
 - `--epoch` now reports `blocked` (naming the modal's title when one is up) and `--wait-ready` exits with reason `"blocked"` for that case — a merely stalled main thread (long import) stays visible on `--epoch` but does not abort the wait
 
-Exit code is `1` if and only if at least one check is failing; `0` otherwise.
+Exit code is `1` if and only if at least one check is failing; `0` otherwise. A bad or missing flag value is `2` (usage error) on every door.
 
 ### Door 2: Claude Code plugin
 

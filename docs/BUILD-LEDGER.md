@@ -306,7 +306,7 @@ Ships three things an agent could not do before: run editor code without a human
 
 ## Live proofs — Kintarō, Unity 6000.5.5f1, editor PID 24116, session `53689e8d…`
 
-Real editor, real domain reloads: epoch went 1 → 11 across the run. Kintarō's `Packages/manifest.json` was retargeted to this worktree's `upm/` for the duration (per the preflight ruling) and must be restored to `file:../../unity-agent-kit/upm` before merge. Nothing was ever staged or committed in Kintarō; only its `Temp/` was touched.
+Real editor, real domain reloads: epoch went **1 → 11 over the whole task-5–7 session** (1 → 6 at the first proof pass, the rest during the fix rounds). Kintarō's `Packages/manifest.json` was retargeted to this worktree's `upm/` for the duration (per the preflight ruling) and must be restored to `file:../../unity-agent-kit/upm` before merge. Nothing was ever staged or committed in Kintarō; only its `Temp/` was touched.
 
 - **`kit invoke --menu`**: **1/1** ok — `Kintarō/Build Sandbox (scene + prefabs)` ran, exit 0, and the result carried the builder's own `[Log]` line back to the CLI.
 - **Bad menu path**: `--menu "Nope/Nothing"` → `invoke FAILED: no such menu item`, exit 1, with Unity's own error in `log[]`. Failing for the right reason, not by timeout.
@@ -327,6 +327,16 @@ Real editor, real domain reloads: epoch went 1 → 11 across the run. Kintarō's
 5. **`EditorUtility.DisplayDialog` auto-returns `True` in an unfocused editor**, so it cannot raise a blocking modal for a headless proof anyway. The plan's original modal proof was unrunnable as written even before the no-UI rule landed.
 6. **Modal detection is by window enumeration, not foreground.** The first implementation used the foreground window / `Process.MainWindowTitle`, which reports `""` whenever the editor sits unfocused behind the agent's terminal — i.e. in the normal agent case. Replaced with a two-pass enumeration of this process's visible top-level windows (a disabled window present + another enabled titled window → modal). Two passes because `GetWindowText` on our own window sends `WM_GETTEXT` and blocks on the very main thread that is stalled; pass 2 runs only once a disabled window has proven a modal is up, and a modal pumps its own message loop.
 
+## Final-review fix wave (post-tag, 2026-08-15)
+
+Whole-branch review by the most capable model. Findings, all RESOLVED in this wave — none deferred:
+
+- **RESOLVED — request TTL.** `KitActions.Pump` ran any `req/*.json` regardless of age, so a request that timed out and was retried by the caller could double-fire when a later editor found the original. `Request` now carries `requestedMs` and anything older than `RequestTtlMs` (10 min) is answered `ok: false, "request expired (age N s) — not executed"` instead of dispatched. The CLI's timeout/no-editor line says so.
+- **RESOLVED — in-flight invoke across a domain reload.** The request id is stashed in `SessionState` (`uak.inflight`) before dispatch and erased after `Write`; the first `Pump` on a new domain turns any leftover into `"interrupted by domain reload at epoch N"`. Spec §3's reload-survival contract, previously honoured for the epoch signal but not for a dispatch caught mid-flight — the CLI used to wait out its whole timeout for an answer that could never arrive.
+- **RESOLVED — `Time.frameCount` off the main thread.** `KitConsole.OnLog` runs on the logging thread and read a main-thread-only API. The counter is now sampled once per `EditorApplication.update` into a static `lastFrame` and read as a plain int off-thread.
+- **RESOLVED — the two deferred minors above**: `ERROR_TYPES` is exported from `console.js` and used by `kit.js` (one definition, not two), and `invoke FAILED:` falls back to `no error reported` instead of printing `undefined`.
+- **RESOLVED — exit-code docs**: both READMEs now list `2 = usage error`.
+
 ## Tests
 
 `npm test` — **151/151 pass, green twice** (36.8 s and 38.5 s), including `check:fresh` for both generated bundles. Baseline at `37eb46a` was 127; +24 across Tasks 1–8.
@@ -340,8 +350,7 @@ Next waves:
 - **Plan C — `kit play`**: enter/exit play mode; also carries the deferred spec items `busy` + `progress.json` (play-only) and the `input-shim` doctor check.
 
 Deferred minors, none blocking:
-- `ERROR_TYPES` is duplicated in `kit.js:78` — export it from `console.js` and reuse.
-- `invoke FAILED: undefined` when a result has `ok: false` but no `error` string.
+- `res/<id>.json` is never reaped — every invoke leaves a result file behind. Harmless today because `Temp/` is disposable and Unity clears it, but the directory grows unbounded within a session. Reap on Plan B.
 - `--method` overload resolution is name + arity only and does not use `FlattenHierarchy` — document the sharp edge (a wrong overload surfaces as a readable `Convert.ChangeType` error in `res.error`).
 - No `EditorApplication.quitting` hook to delete `blocked.json` on editor exit; a stale file is benign today only because of the reader's 3 s freshness gate.
 - `SMTO_ABORTIFHUNG` is not bound on the pass-2 `GetWindowText`; if a "modal" ever fails to pump, the probe blocks and `blocked.json` arrives late rather than never.

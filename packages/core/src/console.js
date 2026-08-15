@@ -6,7 +6,9 @@ import { join, dirname } from 'node:path';
 // readable while the editor is mid-reload or stalled, exactly when it matters.
 export const consolePath = (root) => join(root, 'Temp', 'unity-agent-kit', 'console.jsonl');
 
-const ERROR_TYPES = new Set(['Error', 'Exception', 'Assert']);
+// The console entry types that count as errors — the `--errors` filter here and
+// the CLI's "print the stack line too" decision read the same set.
+export const ERROR_TYPES = new Set(['Error', 'Exception', 'Assert']);
 
 export function readConsole(root, { errors = false, sinceEpoch = -1, last = 0 } = {}) {
   let text;
