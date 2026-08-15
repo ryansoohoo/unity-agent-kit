@@ -11,28 +11,37 @@ it passes, and ask before escalating to Tier 2. Sweet-spot effort, not max effor
 ## Tier 0 — eval (~300 ms measured, no reload)
 `unity command eval "<expr>"` (Unity CLI) runs Roslyn-compiled C# in the live
 editor with NO recompile and NO domain reload. Use for: scene queries, asset
-lookups, probes, "did my change take?". Mono only.
+lookups, probes, "did my change take?". Mono only. Exists only when
+com.unity.pipeline is installed and reachable (kit doctor shows the "pipeline"
+row); if "No Unity Editor instances found with reachable Pipeline servers",
+stop retrying it and use the kit's file channel below.
 
 ## Tier 1 — headless typecheck (~0.6 s measured, no editor)
 `dotnet build Assembly-CSharp.csproj` gives Roslyn compile errors with no editor.
 A pass means "types are sound", NOT "Unity will accept this" (no Burst, source
 generators, or ScriptedImporters; csproj is stale until Unity regenerates it).
-Default loop for code-only work in worktrees.
+Default loop for code-only work in worktrees. Tier 1 covers files Unity has
+ALREADY imported — the csproj is regenerated only after an import, so a NEW
+.cs needs one Tier 2 gate first.
 
 ## Tier 2 — real compile + domain reload (~2.2 s+ measured, serialized)
 Needed only when: a new type must become attachable, an asmdef changed, or
 scene/asset mutation follows. This is the canonical wait protocol — other
 skills point here.
-1. Trigger explicitly (`unity command recompile`). An UNFOCUSED editor never
-   auto-imports — measured 90+ seconds of nothing. Never write-and-wait. With
-   the editor unfocused or headless, writing `Temp/unity-agent-kit/refresh.request`
-   (any content) also forces an import.
+1. Trigger explicitly: write `Temp/unity-agent-kit/refresh.request` (any
+   content; works unfocused/headless) — or `unity command recompile` when
+   Tier 0 exists. An UNFOCUSED editor never auto-imports — measured 90+
+   seconds of nothing. Never write-and-wait.
 2. DISCARD the trigger call's response. The reload kills the connection carrying
    it; a killed request can return a well-formed EMPTY 200 (silent false success).
 3. Wait on the epoch signal, never on a clock. Capture the pre-edit epoch
    from `kit --epoch` BEFORE your edit. One-liner:
    `kit --wait-ready --since-epoch <pre-edit epoch> --timeout-ms 120000`
    (exit 0 = fresh+ready with the epoch bumped; exit 1 = a JSON reason).
+   Reason `blocked` = a modal is up and the JSON names its title (e.g. "API
+   Update Required") — report it and stop; do not keep polling. A merely
+   stalled main thread (long import) shows in `kit --epoch` as
+   `blocked.kind: "main-thread-stalled"` and the wait runs to its deadline.
    Or poll `kit --epoch` (or read `Temp/unity-agent-kit/epoch.json`) on a
    quarter-second loop until `fresh && state == "ready"` AND the epoch has
    bumped past its pre-edit value — not `ready` alone: a poll started right
@@ -51,11 +60,25 @@ skills point here.
 
 If the state passed through "compiling" but returned to "ready" WITHOUT an
 epoch bump, the compile almost certainly FAILED — stop waiting and read the
-console/Editor.log for errors instead of running out the deadline. Caveat: a
+console: `kit console --errors --since-epoch <pre-edit epoch>` (structured,
+from Temp/unity-agent-kit/console.jsonl); the file fallback is the PROJECT's
+`Logs/Editor.log` — NOT %LOCALAPPDATA%\Unity\Editor\Editor.log, which is a
+stale rotated copy that has misled agents. Read it instead of running out the
+deadline. Caveat: a
 bump proves a reload happened after your capture, not that it contains YOUR
 edit — trustworthy only when you are the sole import trigger; with a human
 also using the editor, verify content (eval a probe) or wait for a second
 bump / a worldRevision advance.
+
+## Running editor code yourself
+You can run any [MenuItem] or static editor method without a human click:
+`kit invoke --menu "Tools/My Builder"` or
+`kit invoke --method My.Editor.Type.Build --arg x`
+(exit 0 = ran, 1 = error/timeout/blocked, 3 = no editor; the result carries
+the console lines it produced plus startedEpoch/finishedEpoch, so chain
+`--wait-ready --since-epoch` if it triggered an import).
+Prefer writing an editor script and invoking it over hand-editing scene/prefab
+YAML. Do NOT ask the human to click a menu item for you.
 
 ## Never
 - Never trust an empty response body as success.
