@@ -114,3 +114,16 @@ test('waitReady: returns reason blocked immediately when the main thread is stal
   assert.equal(r.snap.blocked.kind, 'modal');
   assert.ok(r.waitedMs < 1000);
 });
+
+// A long synchronous import stalls the main thread for well over StallMs. It
+// needs no human and it ends on its own, so it must NOT abort the wait — but
+// it stays visible on the snapshot.
+test('waitReady: a non-modal stall is waited out, not treated as blocked', async () => {
+  const p = proj();
+  writeSnap(p, { ...ready(2), heartbeatMs: Date.now() - 6000 });
+  writeBlocked(p, blockedNow({ kind: 'main-thread-stalled', title: '' }));
+  const r = await waitReady(p, { timeoutMs: 200, pollMs: 20 });
+  assert.equal(r.reason, 'timeout');
+  assert.ok(r.waitedMs >= 200);
+  assert.equal(r.snap.blocked.kind, 'main-thread-stalled');
+});

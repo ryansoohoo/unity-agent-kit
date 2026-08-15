@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync, renameSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { readEpoch, isFresh } from './kanabo.js';
+import { readEpoch, isFresh, isWaitAborting } from './kanabo.js';
 
 // Editor-actions request channel (v3). The CLI drops req/<id>.json; the
 // editor's KanaboEpoch tick picks it up, deletes it, does the work, and
@@ -34,6 +34,8 @@ export function readResult(root, id) {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // Bounded wait with a reason: 'done' | 'timeout' | 'no-editor' | 'blocked'.
+// 'blocked' means a MODAL only — a plain main-thread stall (a long synchronous
+// import) is waited out, since the result still arrives when it ends.
 // ok is true only for done + result.ok. Never throws.
 export async function awaitResult(root, id, { timeoutMs = 120000, pollMs = 250 } = {}) {
   const started = Date.now();
@@ -45,7 +47,10 @@ export async function awaitResult(root, id, { timeoutMs = 120000, pollMs = 250 }
     // Ahead of the freshness gate on purpose: blocked.json only exists when the
     // MAIN thread stalled, so the epoch heartbeat is stale by construction. Gating
     // this on isFresh would report 'no-editor' for the case it is meant to name.
-    if (snap && snap.blocked) return { ok: false, reason: 'blocked', result: null, snap, waitedMs: Date.now() - started };
+    if (isWaitAborting(snap)) return { ok: false, reason: 'blocked', result: null, snap, waitedMs: Date.now() - started };
+    // A fresh blocked.json proves the editor is alive — its own background
+    // thread just wrote it — even though the main-thread heartbeat is stale.
+    if (snap?.blocked) sawEditor = true;
     if (snap && isFresh(snap)) sawEditor = true;
     if (Date.now() - started >= timeoutMs) {
       return { ok: false, reason: sawEditor ? 'timeout' : 'no-editor', result: null, snap: snap ?? null, waitedMs: Date.now() - started };

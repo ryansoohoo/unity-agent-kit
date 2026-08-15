@@ -77,3 +77,14 @@ test('awaitResult: blocked when the main thread is stalled and blocked.json is f
   const r = await awaitResult(p, id, { timeoutMs: 100, pollMs: 20 });
   assert.equal(r.reason, 'blocked'); assert.equal(r.snap.blocked.title, 'API Update Required');
 });
+
+// A long synchronous import is not a modal: nobody has to dismiss it, and the
+// result lands when it finishes. Keep waiting, but keep showing it.
+test('awaitResult: a non-modal stall is waited out, not treated as blocked', async () => {
+  const p = proj(); fresh(p, { heartbeatMs: Date.now() - 6000 });
+  writeFileSync(blockedPath(p), JSON.stringify({ kind: 'main-thread-stalled', title: '', sinceMs: Date.now() - 5000, threadHeartbeatMs: Date.now(), mainStalledMs: 5000 }));
+  const id = writeRequest(p, 'invoke', {});
+  const r = await awaitResult(p, id, { timeoutMs: 200, pollMs: 20 });
+  assert.equal(r.reason, 'timeout');
+  assert.equal(r.snap.blocked.kind, 'main-thread-stalled');
+});
