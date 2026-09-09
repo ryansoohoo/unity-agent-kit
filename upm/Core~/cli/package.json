@@ -1,12 +1,12 @@
 {
   "name": "unity-agent-kit",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "type": "module",
   "bin": {
     "unity-agent-kit": "./bin/kit.js"
   },
   "dependencies": {
-    "@unity-agent-kit/core": "0.6.0"
+    "@unity-agent-kit/core": "0.6.1"
   },
   "files": [
     "bin",

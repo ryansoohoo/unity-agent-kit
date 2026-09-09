@@ -15,7 +15,7 @@ namespace UnityAgentKit.Doctor
     // Discovery reads loaded assemblies and Editor state. It never invokes discovered methods.
     internal static class KitCapabilities
     {
-        [Serializable] sealed class Query { public string filter; public int offset, limit = 100; }
+        [Serializable] sealed class Query { public string filter; public int offset, limit = 100; public bool details; }
         [Serializable] internal sealed class AssemblyIdentity { public string name, version, mvid, location; }
         [Serializable] sealed class SceneInfo { public string path, name; public bool active, dirty, loaded; }
         [Serializable] sealed class MethodInfoRow { public string method, signature, returns, assembly, mvid; public string[] parameters; }
@@ -29,7 +29,8 @@ namespace UnityAgentKit.Doctor
             public SceneInfo[] scenes;
             public AssemblyIdentity[] assemblies;
             public MethodInfoRow[] methods;
-            public int matchedMethods, offset, limit;
+            public int matchedMethods, offset, limit, assemblyCount;
+            public bool assembliesIncluded, detailsAvailable = true;
             public bool methodsTruncated;
             public bool scanTruncated;
         }
@@ -84,7 +85,8 @@ namespace UnityAgentKit.Doctor
                 processRole = "main-editor", editorFocused = InternalEditorUtility.isApplicationActive,
                 runInBackground = Application.runInBackground, paused = EditorApplication.isPaused,
                 pipelineInstalled = pipeline != null, pipelineVersion = pipeline?.version,
-                scenes = scenes.ToArray(), assemblies = relevant.Select(Identity).ToArray(), methods = methods.ToArray(),
+                scenes = scenes.ToArray(), assemblies = q.details ? relevant.Select(Identity).ToArray() : Array.Empty<AssemblyIdentity>(), methods = methods.ToArray(),
+                assemblyCount = relevant.Length, assembliesIncluded = q.details,
                 matchedMethods = matched, offset = q.offset, limit = q.limit, methodsTruncated = q.offset + methods.Count < matched,
                 scanTruncated = scanTruncated,
                 commands = new[] { "status", "capabilities", "refresh", "invoke", "check", "session", "console", "operation status/wait/cancel", "lease acquire/status/renew/release", "profiler" },

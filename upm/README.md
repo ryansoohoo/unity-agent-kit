@@ -4,7 +4,7 @@ The Editor bridge for [Unity Agent Kit](https://github.com/ryansoohoo/unity-agen
 It supplies compilation receipts, discovery, checks, scoped Play sessions,
 console access, and profiler operations through a local file transport.
 
-For Codex, Claude Code, or Cursor, follow the [setup guide](https://github.com/ryansoohoo/unity-agent-kit/blob/v0.6.0/docs/setup.md).
+For Codex, Claude Code, or Cursor, follow the [setup guide](https://github.com/ryansoohoo/unity-agent-kit/blob/v0.6.1/docs/setup.md).
 The setup command installs this package, configures the shared MCP server, and
 copies the client skills. Installing this UPM package alone does not configure MCP.
 

@@ -5,15 +5,17 @@ description: Hot editor, cold worktrees. Use when planning parallel agents, a se
 
 # One Editor checkout, parallel code work
 
-An Editor sees files in its own checkout. A method invoked there cannot verify another branch's edits merely because that agent owns a lease.
+An Editor sees files in its own checkout. A method invoked there cannot verify another branch's edits merely because that agent owns a lease. Identify that checkout from the project's MCP configuration and confirm it with `unity_status` before planning integration.
 
-Keep parallel code and offline tests in separate worktrees without Editors when that suits the task. Assign one owner to integrate explicit changes into the checkout the Editor opened, inspect the combined diff, and run `unity-verify`. Integration may use reviewed commits or selected patches according to the repository workflow. The bridge does not switch branches, cherry-pick commits or merge changes for you.
+Prepare code and run offline tests in isolated worktrees first. If the starting work includes uncommitted changes, select the needed tracked and untracked files deliberately; a new worktree alone does not contain them. Preserve the user's originals and inspect the resulting diff.
+
+When the changes are ready, acquire an Editor lease just before integrating reviewed commits or selected patches into its checkout. Inspect the combined diff, run `unity-verify`, complete cleanup and release. Do not hold the lease for unrelated coding or offline tests. Do not shorten the lease by editing the shared checkout before acquiring it. The bridge does not switch branches, cherry-pick commits or merge changes for you.
 
 Do not switch the user's dirty Editor checkout to another branch or copy its `Library` into a worker checkout. Preserve uncommitted user changes. If independent scene or Play work requires a second Editor, use a separate project checkout with its own `Library` and channel, account for import cost, and name which Editor each operation targets.
 
-## Reserve the complete Editor session
+## Reserve integration and verification
 
-Here `kit` means `node <kit-checkout>/packages/cli/bin/kit.js`.
+Here `kit` means `node <kit-checkout>/packages/cli/bin/kit.js`. Prefer the project's configured MCP server and copied skills. Find its launcher in `.codex/config.toml`, `.mcp.json` or `.cursor/mcp.json` before searching global homes or versioned plugin caches.
 
 When MCP is connected, use `unity_lease_acquire`, `unity_lease_status`, `unity_lease_renew`, `unity_lease_release`, and `unity_lease_cancel` with their advertised arguments. Codex, Claude Code and Cursor share this same per-project queue. Reuse a returned ticket when retrying acquisition. Use a distinct task owner ID and only the token returned for that owner.
 

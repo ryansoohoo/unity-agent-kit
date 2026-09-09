@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.1
+
+- Kept routine status and capability responses compact, with full assembly and skill inventories available on request.
+- Standardized operation state, structured data and typed invocation values across CLI and MCP responses.
+- Updated skills to prefer project configuration and skills, prepare code in isolated worktrees before Editor integration, and check the game state that actually consumes a setting.
+
 ## 0.6.0
 
 - Added a local stdio MCP server and a project installer for Codex, Claude Code and Cursor, including configuration checks, conflict handling and undo.

@@ -40,7 +40,7 @@ Editor requests wait at most five seconds per MCP call. `pending:true` and `acce
 
 All Editor mutations require a matching `leaseToken`. Observing status, capabilities, operations, Play status and console does not require a lease. Profiler `status`, `targets`, `sessions`, `frames`, `threads`, `frame` and `sample` are read-only; other profiler actions require ownership. `analyze` can load archived frames into the live buffer and therefore requires a lease. An expired owner may request Play/profiler cleanup while its active work still holds ownership; renew before starting additional work.
 
-Operation results preserve the Editor's invocation outcome and expose returned data separately. For a completed profiler operation, inspect the profiler response's own `data.ok` too. Malformed result JSON keeps its operation ID and raw receipt, with `dataError` describing the parsing failure.
+Editor operation results expose `id`, `state`, `ok` and `pending` at the top level. Read structured service data in `data` and method values in `returnValue`, with `returnType` and `returnValueKnown` identifying typed results. Profiler `ok` combines invocation and service success, including results recovered through operation status or wait. `rawReceiptPath` identifies the preserved receipt; `details:true` adds raw JSON fields and full discovery inventories. Malformed result JSON keeps its operation ID and reports a parsing error.
 
 ## Development
 

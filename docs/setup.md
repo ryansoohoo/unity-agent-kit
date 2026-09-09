@@ -9,7 +9,7 @@ Install Git and Node.js 20 or newer, and have an existing Unity 6 project availa
 ```sh
 git clone https://github.com/ryansoohoo/unity-agent-kit.git
 cd unity-agent-kit
-git checkout v0.6.0
+git checkout v0.6.1
 npm ci
 node scripts/setup.mjs --project "/path/to/UnityProject" --client codex
 ```
@@ -19,6 +19,8 @@ Choose `codex`, `claude`, `cursor`, or `all`. Quote paths containing spaces. On 
 Setup adds the local `com.unity-agent-kit.doctor` UPM dependency, the selected client's project MCP configuration, and five focused skills. It preserves unrelated configuration. Conflicting kit entries are reported; `--replace` explicitly replaces them and saves their previous values. `--no-skills` installs the connection without copying skills. Setup does not rewrite `AGENTS.md` or `CLAUDE.md`.
 
 The saved paths are absolute and local. Keep the clone in place and run setup on every machine that uses it. Review generated project files before committing them, because another developer's checkout paths will differ.
+
+Use this project connection and its copied skills for routine work. A separate versioned plugin cache can point at an older kit. When locating the launcher, read the project's MCP configuration first; search global installations only if the project has no configured entry. Confirm the configured `--project` is the checkout opened by the intended Unity Editor.
 
 Open the Unity project once and wait for its package import and C# compilation. Then open the same project in your coding client and enable the connection below. Unity can remain in the background after it is ready.
 
@@ -77,22 +79,30 @@ node scripts/setup.mjs --project "/path/to/UnityProject" --client codex --check
 
 `--check` reads the desired configuration and installed files. Exit code 0 means they match; code 1 means setup differs. It does not launch Unity, start an MCP connection or prove that C# compiled.
 
-With Unity open, check the actual Editor:
+With Unity open, ask the client to call `unity_status` and `unity_capabilities` through its configured `unity-agent-kit` connection. Confirm the returned project path is the intended Editor checkout, the runtime version matches the installed release, and the response uses protocol 2. This checks the configured connection; a connected MCP process alone can exist while Unity is closed.
+
+The CLI can also check the Editor independently:
 
 ```sh
 node packages/cli/bin/kit.js status "/path/to/UnityProject" --json
 node packages/cli/bin/kit.js capabilities "/path/to/UnityProject" --json
 ```
 
-Confirm the project path, runtime version and protocol 2 response. In your client, ask the agent to call `unity_status` and `unity_capabilities`. A connected MCP server can exist while Unity is closed, so check both layers.
+Status and capabilities return compact summaries. Request `--details` or MCP `details: true` to diagnose assembly or skill-version differences. A successful direct CLI call does not establish that a client's configured launcher or active MCP connection works.
 
 If the client has no tools, confirm that you opened the configured project, trusted its configuration and restarted the task. If the Editor does not answer, check its package import and compilation errors. If paths moved, rerun setup against the new clone location and review any reported conflict. Background operation does not bypass a modal dialog or an unrelated broken script.
 
 ## Use the connection
 
-Ask agents to acquire one lease for their complete Editor sequence, refresh the changed files, check against the returned receipt, complete Play/profiler cleanup, then release. Waiting agents can continue code work in separate worktrees. They must integrate the selected changes into the Editor's checkout before verification. The bridge does not switch branches or merge worktrees for them.
+Prepare changes and run offline tests in isolated worktrees before acquiring the Editor lease. A new worktree does not include another checkout's uncommitted edits. Select any required tracked and untracked changes deliberately and preserve the user's originals.
+
+Acquire the lease just before integrating the selected changes into the Editor's checkout. Inspect the combined diff, refresh the changed files, check against the returned receipt, complete Play/profiler cleanup, then release. Do not hold the lease for unrelated offline work or edit the shared checkout before acquiring it. Waiting agents can continue in their own worktrees. The bridge does not switch branches or merge worktrees, and an Editor cannot verify code that only exists on another branch. Do not copy `Library` between projects.
+
+Assign scene, prefab and other serialized asset ownership separately so collaborators do not make conflicting edits. An Editor lease controls cooperating bridge requests; it does not fence filesystem writes.
 
 Play callbacks are existing static C# methods under project `Assets`. They define game-specific setup, input, assertions and teardown. The service does not press physical keys or provide a Unity Test Framework runner. See [Editor operations](operations.md) for callback signatures and a scenario JSON example.
+
+For a game configuration change, check the actual loaded component or runtime system that consumes it. A getter, draft settings object or successful setter call does not prove that the game is using the intended value. Use a project proof method tied to the refresh receipt and report the assertion it performed.
 
 Profiler context records scene, resolution, focus, background settings and caller-supplied workload information. Keep those conditions matched when comparing changes. See [Profiler capture and analysis](profiler.md) for CPU sample queries, overhead and archive limits.
 
