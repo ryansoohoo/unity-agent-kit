@@ -28,7 +28,9 @@ test('path-headroom: warn when Library nests deep relative to MAX_PATH', async (
   const deep = join(d, 'Library', 'PackageCache', 'a'.repeat(80), 'b'.repeat(80), 'c'.repeat(60));
   mkdirSync(deep, { recursive: true });
   writeFileSync(join(deep, 'x.meta'), '');
-  const r = (await doctor(createContext(d), { only: 'path-headroom' }))[0];
+  const ctx = createContext(d);
+  assert.equal((await doctor({ ...ctx, platform: 'linux' }, { only: 'path-headroom' }))[0].status, 'na');
+  const r = (await doctor({ ...ctx, platform: 'win32' }, { only: 'path-headroom' }))[0];
   assert.equal(r.status, 'warn');
   assert.match(r.evidence, /headroom/);
 });

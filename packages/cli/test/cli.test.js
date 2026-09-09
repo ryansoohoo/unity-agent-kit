@@ -245,3 +245,18 @@ test('console: reads, filters, clears', () => {
   assert.match(r.out, /console cleared/);
   assert.equal(readFileSync(consolePath(dir), 'utf8'), '');
 });
+
+test('large console and bridge operation JSON flush completely before the CLI exits', () => {
+  const dir = tmp('uak-output-');
+  mkdirSync(resDir(dir), { recursive: true });
+  const message = 'large-output-'.repeat(32768) + 'complete-tail';
+  const entry = { epoch: 1, type: 'Log', message };
+  writeFileSync(consolePath(dir), JSON.stringify(entry) + '\n');
+  writeFileSync(join(resDir(dir), 'large.json'), JSON.stringify({ id: 'large', ok: true, state: 'completed', log: [entry] }));
+  for (const args of [['console', dir, '--json'], ['op', 'status', dir, '--id', 'large']]) {
+    const result = run(args, dir);
+    assert.equal(result.code, 0);
+    const json = JSON.parse(result.out);
+    assert.equal(Array.isArray(json) ? json[0].message : json.operation.log[0].message, message);
+  }
+});

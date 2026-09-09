@@ -12,6 +12,8 @@ function repo() { const d = tmp('uak-'); execFileSync('git', ['init', '-q', d]);
 
 test('longpaths: fail → apply → pass, undoable', async () => {
   const ctx = createContext(repo());
+  assert.equal((await doctor({ ...ctx, platform: 'linux' }, { only: 'longpaths' }))[0].status, 'na');
+  ctx.platform = 'win32';
   assert.equal((await doctor(ctx, { only: 'longpaths' }))[0].status, 'fail');
   await applyOne(ctx, 'longpaths');
   assert.equal(ctx.git('config', '--get', 'core.longpaths').out, 'true');

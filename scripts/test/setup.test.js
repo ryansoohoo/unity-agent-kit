@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { setup } from '../setup.mjs';
@@ -13,7 +13,7 @@ const read = path => readFileSync(path, 'utf8');
 const json = path => JSON.parse(read(path));
 
 function fixture(t) {
-  const root = mkdtempSync(join(tmpdir(), 'unity setup é '));
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'unity setup é ')));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const project = join(root, 'My Unity 雪'), kitRoot = join(root, 'Kit clone ö');
   mkdirSync(join(project, 'Assets'), { recursive: true });

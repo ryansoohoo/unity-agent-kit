@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readdirSync, renameSync, rmSync, existsSync, unlinkSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readdirSync, realpathSync, renameSync, rmSync, existsSync, unlinkSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -27,7 +27,7 @@ function publish(file, value) {
 }
 
 function project(t, editor = true) {
-  const root = mkdtempSync(join(tmpdir(), 'uak-mcp-'));
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'uak-mcp-')));
   for (const path of ['Assets', 'Packages', 'ProjectSettings', 'Temp/unity-agent-kit/req', 'Temp/unity-agent-kit/running', 'Temp/unity-agent-kit/ops', 'Temp/unity-agent-kit/res'])
     mkdirSync(join(root, path), { recursive: true });
   writeFileSync(join(root, 'Packages/manifest.json'), '{"dependencies":{}}');
