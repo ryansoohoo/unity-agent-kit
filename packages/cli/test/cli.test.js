@@ -175,18 +175,16 @@ test('invoke: usage error without --menu/--method (exit 2), no request written',
   assert.equal(existsSync(reqDir(dir)), false, 'no request written on a usage error');
 });
 
-test('invoke: no editor → exit 3 and the request file is left for a later editor to find', () => {
+test('invoke: no editor exits 3 and removes unclaimed work without claiming legacy cancellation certainty', () => {
   const dir = tmp('uak-');
   const r = run(['invoke', dir, '--menu', 'Tools/Foo', '--timeout-ms', '150', '--json'], dir);
   assert.equal(r.code, 3);
   const j = JSON.parse(r.out);
   assert.equal(j.reason, 'no-editor');
-  const req = JSON.parse(readFileSync(join(reqDir(dir), readdirSync(reqDir(dir))[0]), 'utf8'));
-  assert.equal(req.verb, 'invoke'); assert.equal(req.menu, 'Tools/Foo');
-  // the human line must name the TTL, not just "left in req": a request an
-  // editor picks up 10+ min later is dropped, not run.
-  const human = run(['invoke', dir, '--menu', 'Tools/Foo', '--timeout-ms', '150'], dir);
-  assert.match(human.out, /expired/);
+  assert.deepEqual(readdirSync(reqDir(dir)), []);
+  assert.equal(j.cancellation.removedFromQueue, true);
+  assert.equal(j.cancellation.cancelled, false);
+  assert.match(j.cancellation.reason, /uncertain/);
 });
 
 // The fake editor has to be its own PROCESS, not a setInterval in this one:

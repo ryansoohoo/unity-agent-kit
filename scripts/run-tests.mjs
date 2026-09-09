@@ -8,7 +8,7 @@ import { spawnSync } from 'node:child_process';
 // Directory args are not an option — `node --test <dir>` is broken on Windows.
 // --test-concurrency=1 is required: the tests drive real git merges and flake
 // in parallel.
-const ROOTS = ['packages/core/test', 'packages/cli/test'];
+const ROOTS = ['packages/core/test', 'packages/cli/test', 'packages/mcp/test', 'scripts/test'];
 
 const files = [];
 for (const root of ROOTS) {

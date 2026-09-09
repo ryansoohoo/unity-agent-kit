@@ -1,89 +1,41 @@
 ---
 name: unity-verify
-description: Use when verifying Unity C# changes compile or behave, or a new type became attachable - picks the cheapest of three tiers. Do NOT use for merge conflicts, placement, or player/exe builds.
+description: Three-tier verification, cheapest first. Use when verifying Unity C# changes compile or behave, or a new type became attachable. Do NOT use for merge conflicts, placement, or player/exe builds.
 ---
 
-# Unity verification: three tiers, cheapest first
+# Verify the code Unity is running
 
-STOP CONDITION: answer at the cheapest tier that resolves the question, stop after
-it passes, and ask before escalating to Tier 2. Sweet-spot effort, not max effort.
+Choose the cheapest tier that answers the task. Here `kit` means `node <kit-checkout>/packages/cli/bin/kit.js`; supply the target Unity project path explicitly when working elsewhere.
 
-## Tier 0 — eval (~300 ms measured, no reload)
-`unity command eval "<expr>"` (Unity CLI) runs Roslyn-compiled C# in the live
-editor with NO recompile and NO domain reload. Use for: scene queries, asset
-lookups, probes, "did my change take?". Mono only. Exists only when
-com.unity.pipeline is installed and reachable (kit doctor shows the "pipeline"
-row); if "No Unity Editor instances found with reachable Pipeline servers",
-stop retrying it and use the kit's file channel below.
+When the `unity-agent-kit` MCP server is connected, prefer its typed tools: `unity_status`, `unity_capabilities`, `unity_lease_acquire`, `unity_refresh`, `unity_check`, and `unity_lease_release`. Supply the acquired `leaseToken` on mutations and the successful refresh ID as `after` on the check. Tools are bound to the configured Editor checkout. A pending result requires `unity_operation_status` or `unity_operation_wait` before continuing. The CLI examples below describe the same workflow when MCP is unavailable.
 
-## Tier 1 — headless typecheck (~0.6 s measured, no editor)
-`dotnet build Assembly-CSharp.csproj` gives Roslyn compile errors with no editor.
-A pass means "types are sound", NOT "Unity will accept this" (no Burst, source
-generators, or ScriptedImporters; csproj is stale until Unity regenerates it).
-Default loop for code-only work in worktrees. Tier 1 covers files Unity has
-ALREADY imported — the csproj is regenerated only after an import, so a NEW
-.cs needs one Tier 2 gate first.
+## Tier 0: inspect existing evidence
 
-## Tier 2 — real compile + domain reload (~2.2 s+ measured, serialized)
-Needed only when: a new type must become attachable, an asmdef changed, or
-scene/asset mutation follows. This is the canonical wait protocol — other
-skills point here.
-1. Trigger explicitly: write `Temp/unity-agent-kit/refresh.request` (any
-   content; works unfocused/headless) — or `unity command recompile` when
-   Tier 0 exists. An UNFOCUSED editor never auto-imports — measured 90+
-   seconds of nothing. Never write-and-wait.
-2. DISCARD the trigger call's response. The reload kills the connection carrying
-   it; a killed request can return a well-formed EMPTY 200 (silent false success).
-3. Wait on the epoch signal, never on a clock. Capture the pre-edit epoch
-   from `kit --epoch` BEFORE your edit. One-liner:
-   `kit --wait-ready --since-epoch <pre-edit epoch> --timeout-ms 120000`
-   (exit 0 = fresh+ready with the epoch bumped; exit 1 = a JSON reason).
-   Reason `blocked` = a modal is up and the JSON names its title (e.g. "API
-   Update Required") — report it and stop; do not keep polling. A merely
-   stalled main thread (long import) shows in `kit --epoch` as
-   `blocked.kind: "main-thread-stalled"` and the wait runs to its deadline.
-   Or poll `kit --epoch` (or read `Temp/unity-agent-kit/epoch.json`) on a
-   quarter-second loop until `fresh && state == "ready"` AND the epoch has
-   bumped past its pre-edit value — not `ready` alone: a poll started right
-   after the trigger can land inside the editor's half-second scan cadence
-   and read the old snapshot.
-   The file stays readable through the reload window where every port is dead.
-   After an asset-only refresh, watch
-   `worldRevision` advance instead — it bumps every import batch, C# or not,
-   while `epoch` only bumps on a domain reload. Hard deadline always (the
-   120-second default): on timeout, say so and stop — a hung wait reported
-   honestly beats a sleep that lies.
-   Absent signal file → the editor isn't running the kit's UPM package; fall
-   back to `recompile_status` polling, NEVER a bare sleep.
-4. Retry on wall-clock budget, never on error codes: dead local ports TIME OUT
-   on Windows (SYN dropped), they do not refuse.
+Use `kit status <project> --json`, `kit capabilities <project> --json`, or `kit methods <project> --filter Namespace.Type --json` to discover the running Editor and callable methods. Check project path, session, CLI/package versions and protocol before relying on a cached installation. Fresh `ready` state only says the Editor is responsive. It does not prove the current source was compiled.
 
-If the state passed through "compiling" but returned to "ready" WITHOUT an
-epoch bump, the compile almost certainly FAILED — stop waiting and read the
-console: `kit console --errors --since-epoch <pre-edit epoch>` (structured,
-from Temp/unity-agent-kit/console.jsonl); the file fallback is the PROJECT's
-`Logs/Editor.log` — NOT %LOCALAPPDATA%\Unity\Editor\Editor.log, which is a
-stale rotated copy that has misled agents. Read it instead of running out
-the deadline. Caveat: a bump proves a reload happened after your capture,
-not that it contains YOUR edit — trustworthy only when you are the sole
-import trigger; with a human also using the editor, verify content (eval a
-probe) or wait for a second bump / a worldRevision advance.
+## Tier 1: check code without the Editor
 
-## Running editor code yourself
-You can run any [MenuItem] or static editor method without a human click:
-`kit invoke --menu "Tools/My Builder"` or
-`kit invoke --method My.Editor.Type.Build --arg x`
-(exit 0 = ran, 1 = error/timeout/blocked, 3 = no editor; the result carries
-the console lines it produced plus startedEpoch/finishedEpoch, so chain
-`--wait-ready --since-epoch` if it triggered an import).
-Prefer writing an editor script and invoking it over hand-editing scene/prefab
-YAML. Do NOT ask the human to click a menu item for you.
+Run the project's existing compiler or focused tests when they cover the change. A generated Unity project file may omit a new script until Unity imports it. Offline compilation does not prove attachment, serialization, scene behavior, or what the running Editor loaded.
 
-## Never
-- Never trust an empty response body as success.
-- Never `sleep` as a compile wait — poll status.
-- Never claim a perf fix without before/after numbers captured at real settings
-  (bad: rewrite the suspected system from code-reading; good: eval-inject debug
-  toggles and binary-search suspects against live profiler/frame numbers).
-- Before handing back, re-read your own diff against the bad patterns in
-  unity-recipes; report hits as triage notes, not blockers.
+## Tier 2: refresh, then check in the Editor
+
+For authorized Editor work, hold one lease across source integration, refresh, checks, Play work and cleanup. Code from another worktree must first be integrated into the checkout this Editor opened. See `unity-topology` when coordinating that integration.
+
+```text
+kit lease acquire <project> --owner <task-id> --wait --json
+kit refresh <project> --file Assets/Example.cs --lease <token> --json
+kit check <project> --method Example.Proof.Check --after <receipt-id> --lease <token> --json
+kit lease release <project> --lease <token> --json
+```
+
+Take the token from acquisition and the receipt ID from the successful refresh result. Repeat `--file` for every changed input. For a source-specific loaded-code assertion, add `--probe proof.json` with `{"type":"Example.Proof","field":"Revision","expected":"7"}`. This compares an existing static field in the loaded type; it does not establish behavior by itself.
+
+The receipt correlates requested hashes with import/compilation, reload and loaded assembly identities. `check` or `invoke` with `--after` rejects a receipt whose session, epoch, source hashes or asset revision has changed. A boolean `false` from a check is failure. An asset-only refresh or no-op is not a C# compilation proof. Use this explicit refresh while Unity remains in the background; do not add an Alt-Tab or window-focus step to trigger imports.
+
+For behavior requiring Play, use `kit session start <project> --lease <token> --config scenario.json --wait --json` with existing static callbacks under `Assets`. Inspect `checkRan` and the check result. A session that only entered and exited Play proves lifecycle completion. The service restores scenes, time scale and its temporary run-in-background setting; callbacks must undo their own other state. Clean up before releasing the lease.
+
+## When work stops responding
+
+Use `kit op status <project> --id <operation-id> --json` to distinguish queued, running and terminal work. `kit op cancel` can prevent queued work from starting; it cannot undo a running method. A timeout is not proof of cancellation. Inspect the operation before retrying a mutation, and renew a lease before it expires if the session needs longer. Do not delete inbox files or kill every Unity process as a recovery shortcut.
+
+Report the tier and actual evidence obtained. Full command and scenario schemas are in `docs/operations.md` in the kit checkout.

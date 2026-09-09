@@ -1,0 +1,14 @@
+# Profiler bridge verification, 2026-09-08
+
+Native profiler verification ran on Windows with Unity 6000.5.5f1 before the 0.6.0 MCP adapter and installer were added. The checks below distinguish synthetic fixture evidence from an existing-project smoke check. Native connected-Player and macOS/Linux behavior were not verified.
+
+- C# typecheck against the installed Unity assemblies passed. The real Editor package import passed with no console errors at the new epoch.
+- The initial 28 focused profiler/CLI tests passed. Two unrelated Windows merge-driver failures in the full baseline suite were reproduced without the profiler changes. The later [operation verification](operations-verification.md) records the passing bridge suite; run `npm test` for the current release checks.
+- The disposable native proof recovered nested `Proof.Parent`, `Proof.Child`, and `Proof.Leaf` samples plus a separate `Proof/Worker` thread. Each child appeared exactly three times per parent; repeated calls were not counted as separate frames. Self time excluded direct children, and allocation samples returned metadata and a 26-entry resolved stack.
+- Whole-session analysis read overlapping native checkpoints without duplicate frames. One run covered 411 frames across five chunks, beyond the default 300-frame retained window. Later runs repeated the proof against the final cleanup code. Loading, querying, and unloading restored the previous native frame range.
+- Manual Record-off preserved the uncheckpointed tail. Cancellation and domain reload finalized their archives and restored recording, Editor/CPU recording settings, allocation mode, and target. The isolated Editor exited after verification.
+- An existing-project smoke check recorded 20 Editor frames and exposed 142 threads. Its archive contained all 20 indexed frames with zero reported gaps. Recording and bridge capture were off afterward. These counts verify capture plumbing, not game performance.
+
+Checkpoint writes have measured overhead. The existing-project smoke check took 14.14 ms for its checkpoint; a 245-frame synthetic capture without allocation stacks took 23.47 ms and wrote 7.76 MB. Allocation-stack stress captures took up to 495.93 ms per checkpoint as retained buffers grew. These are diagnostic capture costs, not gameplay performance measurements. The trace marks checkpoint work and the archive reports its cost. `maxMb` is a soft stop threshold that can overshoot by one checkpoint.
+
+Memory object snapshots, GPU hardware analysis, live access to archived raw details while another capture records, and connected-player hardware verification remain outside this core verification. Archived frame indexes can be searched while recording; detailed historical loading and analysis require recording off. See [profiler.md](profiler.md) for commands and limits.

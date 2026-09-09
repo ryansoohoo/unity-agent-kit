@@ -6,18 +6,48 @@ import { getCheck } from '@unity-agent-kit/core/src/registry.js';
 import { undoAll } from '@unity-agent-kit/core/src/audit.js';
 import { readEpoch, isFresh, waitReady } from '@unity-agent-kit/core/src/kanabo.js';
 import { writeRequest, awaitResult } from '@unity-agent-kit/core/src/actions.js';
+import { parseProfilerArgs, profilerRequest, executeProfiler, compareProfiler, validateProfilerContext } from '@unity-agent-kit/core/src/profiler.js';
 import { readConsole, clearConsole, ERROR_TYPES } from '@unity-agent-kit/core/src/console.js';
 import readline from 'node:readline/promises';
+import { runBridgeCli, sourceIdentity } from '@unity-agent-kit/core/src/bridge-cli.js';
 
-const VERBS = ['invoke', 'console'];
+const VERBS = ['console'];
 const argv = process.argv.slice(2);
-// Positional verbs (v3): `kit invoke …`, `kit console …`. Everything else is
-// the v1/v2 flag surface (doctor by default, --epoch, --wait-ready, …).
+const bridgeExit = await runBridgeCli(argv);
+if (bridgeExit !== null) process.exit(bridgeExit);
+if (argv[0] === 'doctor') argv.shift();
+// Remaining legacy entry points: console and doctor flags, including --epoch
+// and --wait-ready. The request bridge handles invoke before this parser.
 const verb = VERBS.includes(argv[0]) ? argv[0] : null;
 const args = verb ? argv.slice(1) : argv;
+if (argv[0] === 'profiler') {
+  try {
+    const parsed = parseProfilerArgs(argv.slice(1));
+    const profilerRoot = parsed.root ?? process.cwd();
+    if (parsed.context) { const { readFileSync } = await import('node:fs'); parsed.contextJson = validateProfilerContext(readFileSync(parsed.context, 'utf8')); }
+    if (parsed.action === 'start') {
+      const context = JSON.parse(parsed.contextJson ?? '{}');
+      context.source = { ...context.source, ...sourceIdentity(profilerRoot) };
+      parsed.contextJson = validateProfilerContext(JSON.stringify(context));
+    }
+    if (parsed.action === 'compare') {
+      if (!parsed.before || !parsed.after) throw new Error('compare needs --before and --after');
+      const { readFileSync, writeFileSync } = await import('node:fs');
+      const data = compareProfiler(readFileSync(parsed.before, 'utf8'), readFileSync(parsed.after, 'utf8'), parsed.limit);
+      if (parsed.out) writeFileSync(parsed.out, JSON.stringify(data, null, 2), { flag: 'wx' });
+      console.log(JSON.stringify(data)); process.exit(0);
+    }
+    const result = await executeProfiler(profilerRoot, profilerRequest(parsed), { writeRequest, awaitResult, timeoutMs: parsed.timeoutMs, leaseToken: parsed.lease });
+    if (parsed.out && result.ok) {
+      const { writeFileSync } = await import('node:fs');
+      writeFileSync(parsed.out, JSON.stringify(result, null, 2), { flag: 'wx' });
+    }
+    console.log(JSON.stringify(result));
+    process.exit(result.ok ? 0 : 1);
+  } catch (e) { console.error(`profiler: ${e.message}`); process.exit(2); }
+}
 const flag = (f) => args.includes(f);
 const opt = (f) => { const i = args.indexOf(f); return i >= 0 ? args[i + 1] : undefined; };
-const opts = (f) => args.flatMap((a, i) => (a === f && i + 1 < args.length ? [args[i + 1]] : []));
 // Numeric options are validated at the door: a typo'd value (`--timeout-ms /path`)
 // would otherwise reach the poller as NaN, where every bound comparison is false
 // forever — a bounded wait silently becoming an endless one.
@@ -28,26 +58,12 @@ const num = (f, dflt) => {
   if (!Number.isFinite(n)) { console.error(`${f} needs a number (got: ${v})`); process.exit(2); }
   return n;
 };
-const OPT_FLAGS = ['--only', '--since-epoch', '--timeout-ms', '--poll-ms', '--menu', '--method', '--arg', '--last'];
+const OPT_FLAGS = ['--only', '--since-epoch', '--timeout-ms', '--poll-ms', '--last'];
 const root = args.find((a, i) => !a.startsWith('--') && !OPT_FLAGS.includes(args[i - 1])) ?? process.cwd();
 
 const GLYPH = { pass: 'OK  ', warn: 'WARN', fail: 'FAIL', na: '--  ' };
 
 const ctx = createContext(root);
-
-if (verb === 'invoke') {
-  const menu = opt('--menu'), method = opt('--method');
-  if (!!menu === !!method) { console.error('invoke needs exactly one of --menu "<path>" or --method Ns.Type.Method'); process.exit(2); }
-  const id = writeRequest(ctx.root, 'invoke', menu ? { menu } : { method, args: opts('--arg') });
-  const r = await awaitResult(ctx.root, id, { timeoutMs: num('--timeout-ms', 120000), pollMs: num('--poll-ms', 250) });
-  if (flag('--json')) console.log(JSON.stringify({ id, ...r }, null, 2));
-  else if (r.reason === 'done') {
-    console.log(r.ok ? `invoke ok (epoch ${r.result.startedEpoch}→${r.result.finishedEpoch})` : `invoke FAILED: ${r.result.error ?? 'no error reported'}`);
-    for (const l of r.result.log ?? []) console.log(`  [${l.type}] ${l.message}${l.stack ? `\n      ${l.stack}` : ''}`);
-  } else if (r.reason === 'blocked') console.log(`editor BLOCKED: ${r.snap.blocked.kind}${r.snap.blocked.title ? ` "${r.snap.blocked.title}"` : ''} — dismiss it, then retry`);
-  else console.log(`invoke ${r.reason} after ${r.waitedMs} ms (request ${id} is in Temp/unity-agent-kit/req — an editor that finds it still runs it, but it will be dropped as expired after 10 min)`);
-  process.exit(r.ok ? 0 : r.reason === 'no-editor' ? 3 : 1);
-}
 
 if (verb === 'console') {
   if (flag('--clear')) { clearConsole(ctx.root); console.log('console cleared'); process.exit(0); }

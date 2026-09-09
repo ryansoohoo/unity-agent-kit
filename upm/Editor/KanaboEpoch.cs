@@ -27,6 +27,10 @@ namespace UnityAgentKit.Doctor
 
         static readonly int Epoch;
         internal static int CurrentEpoch => Epoch;
+        internal static string CurrentSession => SessionState.GetString("uak.sessionId", "");
+        internal static int CurrentPid => Pid;
+        internal static int WorldRevision => SessionState.GetInt("uak.worldRevision", 0);
+        internal static string CurrentState => state;
         static readonly int Pid;
         static string state = "ready";
         static double lastWrite;
@@ -37,6 +41,7 @@ namespace UnityAgentKit.Doctor
         class Snapshot
         {
             public int schema;
+            public int protocol;
             public int pid;
             public string sessionId;
             public int epoch;
@@ -67,6 +72,7 @@ namespace UnityAgentKit.Doctor
                 // file the first logs of a reload under the previous epoch.
                 KitConsole.Install();
                 KitBlocked.Install();
+                KitRefresh.Install();
 
                 // Never claim ready before looking: initial project open runs
                 // InitializeOnLoad while the first import is still going.
@@ -97,6 +103,7 @@ namespace UnityAgentKit.Doctor
             // Every frame, ahead of the heartbeat throttle: the stall detector
             // needs proof the main thread is running, not proof it wrote a file.
             KitBlocked.MainThreadAlive();
+            KitRefresh.Tick();
 
             var now = EditorApplication.timeSinceStartup;
             if (now - lastWrite < HeartbeatSeconds) return;
@@ -140,6 +147,7 @@ namespace UnityAgentKit.Doctor
                 var s = new Snapshot
                 {
                     schema = 1,
+                    protocol = 2,
                     pid = Pid,
                     sessionId = SessionState.GetString("uak.sessionId", ""),
                     epoch = Epoch,

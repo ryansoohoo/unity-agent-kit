@@ -2,7 +2,19 @@
   "name": "unity-agent-kit-monorepo",
   "private": true,
   "type": "module",
-  "workspaces": ["packages/*"],
-  "scripts": { "pretest": "npm run check:fresh", "test": "node scripts/run-tests.mjs", "build:plugin": "node scripts/build-plugin.mjs", "build:upm": "node scripts/build-upm.mjs", "check:fresh": "node scripts/build-plugin.mjs --check && node scripts/build-upm.mjs --check" },
-  "engines": { "node": ">=20" }
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "pretest": "npm run check:fresh",
+    "test": "node scripts/run-tests.mjs",
+    "build:plugin": "node scripts/build-plugin.mjs",
+    "build:upm": "node scripts/build-upm.mjs",
+    "check:fresh": "node scripts/build-plugin.mjs --check && node scripts/build-upm.mjs --check",
+    "setup": "node scripts/setup.mjs",
+    "build": "npm run build:plugin && npm run build:upm"
+  },
+  "engines": {
+    "node": ">=20"
+  }
 }

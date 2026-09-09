@@ -12,7 +12,7 @@ test('upm manifest is a valid editor-only Unity 6 package', () => {
   const pkg = JSON.parse(readFileSync(join(REPO, 'upm', 'package.json'), 'utf8'));
   assert.equal(pkg.name, 'com.unity-agent-kit.doctor');
   assert.match(pkg.unity, /^6000\./);
-  assert.equal(pkg.displayName, 'Unity Agent Kit Doctor');
+  assert.equal(pkg.displayName, 'Unity Agent Kit');
   const asmdef = JSON.parse(readFileSync(join(REPO, 'upm', 'Editor', 'UnityAgentKit.Doctor.Editor.asmdef'), 'utf8'));
   assert.deepEqual(asmdef.includePlatforms, ['Editor']);
   assert.equal(asmdef.name, 'UnityAgentKit.Doctor.Editor');

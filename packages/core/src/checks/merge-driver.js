@@ -8,6 +8,24 @@ import { loadVerify } from '../audit.js';
 const ASSETS = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'assets');
 const toPosix = (p) => p.replace(/\\/g, '/');
 
+function posixShell() {
+  if (process.platform !== 'win32') return { shell: 'sh', env: process.env };
+  try {
+    let dir = execFileSync('git', ['--exec-path'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+    for (let up = 0; up < 4; up++) {
+      const usrBin = join(dir, 'usr', 'bin');
+      if (existsSync(join(usrBin, 'sh.exe'))) {
+        const pathKey = Object.keys(process.env).find(k => k.toUpperCase() === 'PATH') ?? 'PATH';
+        return { shell: join(usrBin, 'sh.exe'), env: { ...process.env, [pathKey]: usrBin + ';' + (process.env[pathKey] ?? '') } };
+      }
+      const parent = dirname(dir);
+      if (parent === dir) break;
+      dir = parent;
+    }
+  } catch {}
+  return { shell: 'sh', env: process.env };
+}
+
 function routed(ctx) {
   const p = join(ctx.root, '.gitattributes');
   if (!existsSync(p)) return false;
@@ -58,15 +76,16 @@ register({
   },
   verify: async (ctx) => {
     try {
-      const out = execFileSync('sh', [join(ASSETS, 'test-merge-driver.sh')], {
+      const { shell, env } = posixShell();
+      const out = execFileSync(shell, [join(ASSETS, 'test-merge-driver.sh')], {
         encoding: 'utf8',
-        env: { ...process.env, UAK_DRIVER: toPosix(join(ctx.root, 'tools', 'unity-yaml-merge.sh')) },
+        env: { ...env, UAK_DRIVER: toPosix(join(ctx.root, 'tools', 'unity-yaml-merge.sh')) },
         stdio: ['ignore', 'pipe', 'pipe'],
       });
       const pass = /PASS=5\s+FAIL=0/.test(out);
       return { ok: pass, proof: pass ? '5/5 regression cases pass (disjoint scene/prefab/meta merge clean; guid & same-field conflicts stop as valid YAML)' : out.slice(-800) };
     } catch (e) {
-      return { ok: false, proof: `suite failed: ${(e.stdout ?? '') + (e.stderr ?? '')}`.slice(0, 800) };
+      return { ok: false, proof: `suite failed: ${`${e.stdout ?? ''}${e.stderr ?? ''}`.trim() || String(e.message ?? e)}`.slice(0, 800) };
     }
   },
 });

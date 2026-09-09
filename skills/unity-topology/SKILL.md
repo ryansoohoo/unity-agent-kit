@@ -1,41 +1,34 @@
 ---
 name: unity-topology
-description: Use when planning parallel agents, worktrees, a second Unity editor, or scene/prefab edit ownership. Do NOT use for verifying code (unity-verify) or merge conflicts (unity-merge).
+description: Hot editor, cold worktrees. Use when planning parallel agents, a second Unity editor, or scene/prefab edit ownership. Do NOT use for verifying code (unity-verify) or merge conflicts (unity-merge).
 ---
 
-# One hot editor, many cold checkouts
+# One Editor checkout, parallel code work
 
-Unity permits exactly ONE editor per project folder (Temp/UnityLockfile;
-deleting it is the documented corruption path).
-A second editor requires a second directory — a git worktree — and costs
-~2.5 GB + ~103 s cold init (measured). A worktree with NO editor costs
-~nothing and verifies in ~0.6 s (measured) via dotnet build.
+An Editor sees files in its own checkout. A method invoked there cannot verify another branch's edits merely because that agent owns a lease.
 
-## The split
-- HOT (serialize): everything touching the asset graph — scene/prefab edits,
-  play mode, screenshots, real compiles — funnels through the one editor, one
-  operation at a time.
-- COLD (parallelize): code-only work in editorless worktrees. This is where
-  parallel agents pay.
+Keep parallel code and offline tests in separate worktrees without Editors when that suits the task. Assign one owner to integrate explicit changes into the checkout the Editor opened, inspect the combined diff, and run `unity-verify`. Integration may use reviewed commits or selected patches according to the repository workflow. The bridge does not switch branches, cherry-pick commits or merge changes for you.
 
-## Scene/prefab ownership (parallel waves)
-BAD:  two parallel tasks both "just tweak" OutdoorsScene.unity.
-GOOD: one owner per scene/prefab per wave; everyone else reads. Additive work
-      (new files) parallelizes freely — shared mutable YAML does not.
+Do not switch the user's dirty Editor checkout to another branch or copy its `Library` into a worker checkout. Preserve uncommitted user changes. If independent scene or Play work requires a second Editor, use a separate project checkout with its own `Library` and channel, account for import cost, and name which Editor each operation targets.
 
-## Bounded dispatch (every parallel sub-task)
-- Pin model and effort explicitly; never inherit.
-- No sub-agent may spawn further sub-agents unless the human asked.
-- Hand a scoped, self-contained brief: files, verify tier, expected output
-  shape, hard termination condition. Not a transcript dump.
-- Every sub-task carries a timeout and a cleanup step (kill orphaned dotnet/
-  Unity processes it started, release its worktree).
-- Routing: frontier model owns the hot editor and mutations; cheap models fan
-  out read-only breadth (audits, log analysis, categorization) across cold
-  worktrees where mistakes are discardable.
+## Reserve the complete Editor session
 
-## Worktree placement (Windows)
-- Short paths, ideally outside the repo (path headroom under MAX_PATH is
-  measured by the kit's doctor). Cap worktree names at ~20 chars.
-- .claude/worktrees/ must be gitignored (doctor enforces) — else one
-  `git clean -xdf` deletes every agent's uncommitted work.
+Here `kit` means `node <kit-checkout>/packages/cli/bin/kit.js`.
+
+When MCP is connected, use `unity_lease_acquire`, `unity_lease_status`, `unity_lease_renew`, `unity_lease_release`, and `unity_lease_cancel` with their advertised arguments. Codex, Claude Code and Cursor share this same per-project queue. Reuse a returned ticket when retrying acquisition. Use a distinct task owner ID and only the token returned for that owner.
+
+```text
+kit lease acquire <project> --owner <task-id> --json
+kit lease acquire <project> --owner <task-id> --ticket <queued-ticket> --wait --json
+kit lease status <project> --json
+kit lease renew <project> --lease <token> --json
+kit lease release <project> --lease <token> --json
+```
+
+Acquisition without `--wait` returns either ownership or a queued ticket and position. Resume that same ticket with the same owner; do not create a new queue entry each poll. A waiting agent can continue code or review in its own worktree, but must not edit the shared Editor's files. Withdraw a queued request with `kit lease cancel <project> --ticket <queued-ticket> --json`.
+
+Retain the lease through integration, refresh, invoke/check, Play restoration and profiler cleanup. Renew it for longer work. Expiry does not transfer ownership while tracked operations, Play work or profiler captures are still active; release likewise refuses active work. Inspect operations and complete cleanup before handing off.
+
+Leases fence cooperating protocol requests, not filesystem writes, legacy clients, raw Editor actions or arbitrary game code. Scene and prefab ownership still needs an explicit agreement between collaborators. Give one owner each serialized asset while its work is in progress. See `unity-merge` if integration produces Unity YAML conflicts.
+
+The command details and supported guarantees are in `docs/operations.md` in the kit checkout.
