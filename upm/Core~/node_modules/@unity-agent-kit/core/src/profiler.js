@@ -1,4 +1,6 @@
-const COMMON = ['json', 'out', 'timeout-ms', 'lease'];
+import { normalizeOperation, normalizeProfiler, normalizeWait } from './responses.js';
+
+const COMMON = ['json', 'out', 'timeout-ms', 'lease', 'details'];
 const OPTIONS = {
   status: [], targets: [], start: ['label', 'target', 'seconds', 'max-mb', 'checkpoint-frames', 'allocations', 'editor', 'context', 'context-json'],
   stop: [], cancel: [], save: ['label'], load: ['path', 'session', 'frame'], unload: [],
@@ -37,6 +39,7 @@ export function parseProfilerArgs(argv) {
     if (seen.has(name)) throw new Error(`duplicate option: ${token}`);
     seen.add(name);
     if (name === 'json') continue;
+    if (name === 'details') { parsed.details = true; continue; }
     if (name === 'editor' || name === 'allocations') { parsed[name] = true; continue; }
     const value = argv[++i];
     if (value === undefined || value.startsWith('--') || !value.trim()) throw new Error(`${token} needs a value`);
@@ -70,29 +73,25 @@ export function validateProfilerContext(json) {
 }
 
 export function profilerRequest(parsed) {
-  const { root, timeoutMs, out, before, after, context, lease, ...request } = parsed;
+  const { root, timeoutMs, out, before, after, context, lease, details, ...request } = parsed;
   return request;
 }
 
-export async function executeProfiler(root, request, { writeRequest, awaitResult, timeoutMs = 10000, leaseToken, expectedSession } = {}) {
+export async function executeProfiler(root, request, { writeRequest, awaitResult, timeoutMs = 10000, leaseToken, expectedSession, details = false } = {}) {
   const deadlineMs = Date.now() + timeoutMs;
   const id = writeRequest(root, 'invoke', { method: 'UnityAgentKit.Doctor.KitProfiler.Execute', args: [JSON.stringify({ ...request, deadlineMs })],
     deadlineMs, leaseToken, expectedSession });
   const waited = await awaitResult(root, id, { timeoutMs, cancelOnTimeout: true });
   if (waited.reason !== 'done') {
     const cancelledBeforeStart = waited.cancellation?.cancelled === true;
-    return { ok: false, id, reason: waited.reason, cancelledBeforeStart, operation: waited.operation, cancellation: waited.cancellation,
+    const operation = waited.cancellation?.operation ?? waited.operation ?? { id, state: 'unknown' };
+    return { ...normalizeWait(root, waited, operation, { details }), cancelledBeforeStart,
       error: cancelledBeforeStart ? 'Request cancelled before execution.'
         : 'Execution outcome is uncertain; inspect operation and profiler status before retrying a mutation.' };
   }
-  if (!waited.ok) return { ok: false, id, error: waited.result?.error || 'Editor invocation failed' };
-  const entry = waited.result?.log?.find(line => line.type === 'Return');
-  if (!entry) return { ok: false, id, error: 'Editor response has no Return message' };
-  try {
-    const response = JSON.parse(entry.message);
-    if (!response || typeof response.ok !== 'boolean') throw new Error('missing boolean ok field');
-    return { ...response, id };
-  } catch (error) { return { ok: false, id, error: `Invalid profiler response: ${error.message}` }; }
+  const normalized = normalizeOperation(root, { ...waited.result, id, method: 'UnityAgentKit.Doctor.KitProfiler.Execute' }, { details });
+  if (!waited.ok) return { ...normalized, ok: false, error: waited.result?.error || 'Editor invocation failed' };
+  return normalizeProfiler(normalized);
 }
 
 function analysis(value) {

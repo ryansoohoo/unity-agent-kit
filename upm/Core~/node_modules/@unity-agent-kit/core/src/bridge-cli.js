@@ -7,10 +7,11 @@ import { writeRequest, awaitResult, readOperation, listOperations, cancelQueued,
 import { leaseStatus, acquireLease, renewLease, releaseLease, cancelTicket } from './leases.js';
 import { readEpoch, isFresh } from './kanabo.js';
 import { createContext } from './context.js';
+import { normalizeOperation, normalizeWait, normalizeCancellation } from './responses.js';
 
 const COMMANDS = new Set(['status', 'capabilities', 'methods', 'refresh', 'op', 'lease', 'session', 'check', 'invoke']);
-const BOOLS = new Set(['json', 'wait', 'async']);
-const VALUES = new Set(['timeout-ms', 'poll-ms', 'lease', 'owner', 'ttl-ms', 'ticket', 'id', 'file', 'files', 'probe', 'method', 'menu', 'arg', 'after', 'expected-epoch', 'filter', 'limit', 'config', 'scene', 'seconds', 'warmup', 'setup', 'step', 'check', 'teardown', 'screenshot']);
+const BOOLS = new Set(['json', 'wait', 'async', 'details']);
+const VALUES = new Set(['timeout-ms', 'poll-ms', 'lease', 'owner', 'ttl-ms', 'ticket', 'id', 'file', 'files', 'probe', 'method', 'menu', 'arg', 'after', 'expected-epoch', 'filter', 'offset', 'limit', 'config', 'scene', 'seconds', 'warmup', 'setup', 'step', 'check', 'teardown', 'screenshot']);
 const pause = ms => new Promise(r => setTimeout(r, ms));
 function parse(argv) {
   const command = argv[0]; let action;
@@ -37,13 +38,16 @@ function parse(argv) {
   };
   return { command, action, values, root, number };
 }
-function localInfo(root) {
+function localInfo(root, details = false) {
   const src = dirname(fileURLToPath(import.meta.url)), snap = readEpoch(root);
+  const origins = skillOrigins(root);
   return { projectPath: root, signalPresent: !!snap, responsive: isFresh(snap), snapshot: snap,
     cli: { packagePath: resolve(src, '..'), version: readJson(resolve(src, '../package.json'))?.version,
-      protocol: 2, sourceHash: createHash('sha256').update(readFileSync(fileURLToPath(import.meta.url))).digest('hex'),
-      sourceHashPath: fileURLToPath(import.meta.url), sourceHashScope: 'This bridge-cli.js file only; excludes other CLI files and dependencies.' },
-    ownership: leaseStatus(root), source: sourceIdentity(root), skills: skillOrigins(root) };
+      protocol: 2, ...(details ? { sourceHash: createHash('sha256').update(readFileSync(fileURLToPath(import.meta.url))).digest('hex'),
+        sourceHashPath: fileURLToPath(import.meta.url), sourceHashScope: 'This bridge-cli.js file only; excludes other CLI files and dependencies.' } : {}) },
+    ownership: leaseStatus(root), source: sourceIdentity(root), skills: details ? origins : {
+      injectionKnown: false, candidateCount: origins.candidates.length, truncated: origins.truncated,
+      versions: [...new Set(origins.candidates.map(candidate => candidate.version).filter(Boolean))], detailsAvailable: true } };
 }
 
 // These are file identities at known locations, not evidence of which skill text
@@ -95,19 +99,17 @@ export function sourceFiles(root, paths) {
   return paths.map(path => { const absolute = resolve(root, path); return { path: absolute,
     sha256: createHash('sha256').update(readFileSync(absolute)).digest('hex') }; });
 }
-function data(result) {
-  if (result?.result?.dataJson) { try { result.data = JSON.parse(result.result.dataJson); } catch { result.ok = false; result.error = 'Malformed Editor dataJson'; } }
-  return result;
-}
 async function request(root, verb, payload, values, timeoutMs) {
   const id = writeRequest(root, verb, { ...payload, leaseToken: values.lease ?? '', requiredReceipt: values.after ?? '',
     expectedEpoch: values['expected-epoch'] ? Number(values['expected-epoch']) : 0, deadlineMs: Date.now() + timeoutMs });
-  if (values.async) return { ok: true, accepted: true, id, operation: readOperation(root, id) };
-  return data(await awaitResult(root, id, { timeoutMs, pollMs: Math.min(Number(values['poll-ms'] ?? 100), timeoutMs), cancelOnTimeout: true }));
+  const options = { details: !!values.details, kind: verb };
+  if (values.async) return { ...normalizeOperation(root, readOperation(root, id), options), accepted: true };
+  const waited = await awaitResult(root, id, { timeoutMs, pollMs: Math.min(Number(values['poll-ms'] ?? 100), timeoutMs), cancelOnTimeout: true });
+  return normalizeWait(root, waited, readOperation(root, id), { ...options, receiptKey: waited.result ? 'result' : 'operation' });
 }
 export const bridgeHelp = `Unity agent kit
-  kit status|capabilities [project] [--filter TypeName] [--lease token]
-  kit methods [project] --filter Namespace.Type
+  kit status|capabilities [project] [--filter TypeName] [--details]
+  kit methods [project] --filter Namespace.Type [--offset N] [--limit 1..200]
   kit refresh [project] --file Assets/Foo.cs [--file ...] --lease token [--probe proof.json]
   kit invoke|check [project] --method Namespace.Type.Method [--arg value] [--after receipt] [--lease token]
   kit op list|status|wait|cancel [project] [--id operation] [--timeout-ms N]
@@ -119,6 +121,8 @@ export const bridgeHelp = `Unity agent kit
   kit console [project] --errors --last N --json
   kit doctor [project] [--only check] [--json]
 Operation waits are bounded. --async returns an ID, not a completed result.
+Read id/data/returnValue at the top level. Raw receipts remain at rawReceiptPath; --details includes raw JSON fields and full discovery inventories.
+Take the ownership token from lease.token and pass it as --lease.
 A lease covers the full refresh/play/check/restore sequence, not individual calls.
 Branch files must already be integrated into the Editor's checkout; a lease does not copy or merge them.`;
 
@@ -135,10 +139,16 @@ export async function runBridgeCli(argv) {
     if (v.async && v.wait) throw new Error('--async and --wait cannot be combined; use the returned operation ID to wait later');
     let result;
     if (command === 'op') {
-      if (action === 'list') result = { ok: true, operations: listOperations(root, number('limit', 20, 1000)) };
-      else if (action === 'status') { const operation = readOperation(root, v.id); result = { ok: operation.state !== 'unknown', operation }; }
-      else if (action === 'cancel') result = cancelQueued(root, v.id);
-      else if (action === 'wait') result = data(await awaitResult(root, v.id, { timeoutMs, pollMs: Math.min(number('poll-ms', 100), timeoutMs) }));
+      const options = { details: !!v.details };
+      if (action === 'list') result = { ok: true, operations: listOperations(root, number('limit', 20, 1000)).map(operation => normalizeOperation(root, operation, options)) };
+      else if (action === 'status') result = normalizeOperation(root, readOperation(root, v.id), options);
+      else if (action === 'cancel') {
+        const cancellation = cancelQueued(root, v.id);
+        result = normalizeCancellation(root, cancellation, options);
+      } else if (action === 'wait') {
+        const waited = await awaitResult(root, v.id, { timeoutMs, pollMs: Math.min(number('poll-ms', 100), timeoutMs) });
+        result = normalizeWait(root, waited, readOperation(root, v.id), { ...options, receiptKey: waited.result ? 'result' : 'operation' });
+      }
       else throw new Error('op action must be list, status, wait, or cancel');
     } else if (command === 'lease') {
       if (action === 'status') result = { ok: true, ...leaseStatus(root) };
@@ -148,8 +158,11 @@ export async function runBridgeCli(argv) {
       else if (action === 'cancel') result = await cancelTicket(root, v.ticket);
       else throw new Error('lease action must be acquire, status, renew, release, or cancel');
     } else if (['status', 'capabilities', 'methods'].includes(command)) {
-      result = await request(root, command === 'methods' ? 'capabilities' : command, { payloadJson: JSON.stringify({ filter: v.filter ?? '', limit: number('limit', 100, 1000), methods: command === 'methods' }) }, v, timeoutMs);
-      result.local = localInfo(root);
+      const filter = (v.filter ?? '').trim(), offset = number('offset', 0, 2147483647), limit = number('limit', 100, 200);
+      if (filter && filter.length < 3 || command === 'methods' && !filter) throw new Error('Method discovery needs a filter of at least three characters');
+      if (!Number.isInteger(offset) || !Number.isInteger(limit) || limit < 1) throw new Error('Discovery offset must be a nonnegative integer and limit must be 1..200');
+      result = await request(root, command === 'methods' ? 'capabilities' : command, { payloadJson: JSON.stringify({ filter, offset, limit, details: !!v.details }) }, v, timeoutMs);
+      result.local = localInfo(root, !!v.details);
     } else if (command === 'refresh') {
       const files = v.files ? JSON.parse(readFileSync(v.files, 'utf8')) : sourceFiles(root, v.file ?? []);
       const payload = { files };

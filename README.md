@@ -11,7 +11,7 @@ You need Git, Node.js 20 or newer, an existing Unity 6 project, and one of the s
 ```sh
 git clone https://github.com/ryansoohoo/unity-agent-kit.git
 cd unity-agent-kit
-git checkout v0.6.0
+git checkout v0.6.1
 npm ci
 node scripts/setup.mjs --project "/path/to/UnityProject" --client codex
 ```

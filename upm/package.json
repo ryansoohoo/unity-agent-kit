@@ -1,6 +1,6 @@
 {
   "name": "com.unity-agent-kit.doctor",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "displayName": "Unity Agent Kit",
   "description": "Local Editor bridge with source-aware refresh, operation recovery, shared ownership, background Play checks and profiling. Includes the repository doctor. Node 20+ required for CLI/MCP; Unity 6.",
   "unity": "6000.0",
@@ -8,8 +8,8 @@
     "name": "Ryan Soohoo"
   },
   "license": "MIT",
-  "documentationUrl": "https://github.com/ryansoohoo/unity-agent-kit/blob/v0.6.0/docs/setup.md",
-  "changelogUrl": "https://github.com/ryansoohoo/unity-agent-kit/blob/v0.6.0/CHANGELOG.md",
+  "documentationUrl": "https://github.com/ryansoohoo/unity-agent-kit/blob/v0.6.1/docs/setup.md",
+  "changelogUrl": "https://github.com/ryansoohoo/unity-agent-kit/blob/v0.6.1/CHANGELOG.md",
   "licensesUrl": "https://github.com/ryansoohoo/unity-agent-kit/blob/v0.6.0/LICENSE",
   "dependencies": {
     "com.unity.modules.imgui": "1.0.0",

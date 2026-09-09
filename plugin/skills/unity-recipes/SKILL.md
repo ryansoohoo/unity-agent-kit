@@ -5,9 +5,11 @@ description: Good-vs-bad recipes for Unity agent operations. Use when doing comp
 
 # Unity operation recipes
 
-Use `node <kit-checkout>/packages/cli/bin/kit.js` for `kit` below. Commands accept the Unity project path, which must identify the Editor's checkout.
+Use `node <kit-checkout>/packages/cli/bin/kit.js` for `kit` below. Read the project's MCP configuration to locate that checkout before searching global installations. Prefer the configured MCP tools and project skills over a versioned plugin-cache path. Every operation must target the checkout opened by the intended Editor.
 
 Prefer the connected `unity-agent-kit` MCP tools when available. `unity_console` reads errors, `unity_operation_status` recovers operation state, and the `unity_play_*` tools run and restore bounded scenarios. Consult the advertised schemas for profiler tools. Keep your `leaseToken` through all mutations and cleanup; pending operation IDs still need observation before another dependent call.
+
+Finish isolated code work and offline tests before taking the Editor lease. Reserve it for integrating selected changes, verification and cleanup. Queued agents can keep working in their own worktrees; they cannot edit the shared Editor's files. See `unity-topology` for that handoff.
 
 ## Waiting for changed code
 
@@ -21,6 +23,10 @@ kit op status <project> --id <operation-id> --json
 ```
 
 Use the structured console and operation result. Text searching Editor.log may pick up old failures, while an empty console cannot establish successful compilation. Keep the refresh diagnostics and receipt for that claim. Clear a console only when the task calls for clearing it.
+
+## Checking a setting the game actually uses
+
+Discover the project's proof method and check the live component or runtime system that consumes the setting. A settings draft or getter may describe only one copy of the value. After applying a change, use `kit check` with the refresh receipt and an assertion for the intended state. A successful invocation or a returned configuration object alone is insufficient behavior evidence.
 
 ## Recovering from a timeout
 

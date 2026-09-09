@@ -9,6 +9,7 @@ import { readConsole, clearConsole, consolePath } from '@unity-agent-kit/core/sr
 import { sourceFiles, sourceIdentity } from '@unity-agent-kit/core/src/bridge-cli.js';
 import { KIT_VERSION } from '@unity-agent-kit/core/src/version.js';
 import { parseProfilerArgs, profilerRequest, compareProfiler, validateProfilerContext } from '@unity-agent-kit/core/src/profiler.js';
+import { normalizeOperation, normalizeProfiler, normalizeCancellation, redactBridgeMetadata } from '@unity-agent-kit/core/src/responses.js';
 
 const version = KIT_VERSION;
 const text = z.string().trim().min(1).max(4096);
@@ -16,7 +17,9 @@ const id = z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/);
 const token = z.string().min(1).max(200);
 const owner = z.string().trim().min(1).max(200);
 const leaseFields = { leaseToken: token };
+const detailFields = { details: z.boolean().default(false).describe('Include full discovery inventories and raw JSON receipt fields.') };
 const waitFields = {
+  ...detailFields,
   waitMs: z.number().int().min(0).max(5000).default(1000).describe('Time to wait for this response. A pending operation keeps running.'),
 };
 const requestFields = {
@@ -41,40 +44,11 @@ export function projectFromArgs(args) {
 
 // Read-only observations should not suggest that another task's lease token is
 // reusable. This is coordination between trusted local clients, not a sandbox.
-function publicValue(value) {
-  if (Array.isArray(value)) return value.map(publicValue);
-  if (!value || typeof value !== 'object') return value;
-  const result = {};
-  for (const [key, item] of Object.entries(value)) {
-    if (['leaseToken', 'token', 'payloadJson', 'args'].includes(key)) continue;
-    if (key === 'dataJson' && typeof item === 'string' && item.trim()) {
-      try { result[key] = JSON.stringify(publicValue(JSON.parse(item))); }
-      catch { result[key] = item; }
-    } else result[key] = publicValue(item);
-  }
-  return result;
-}
-
-function outcome(operation) {
-  const finished = terminalStates.has(operation.state);
-  const result = { ok: finished ? operation.ok === true : operation.state !== 'unknown', id: operation.id,
-    pending: !finished && operation.state !== 'unknown', operation: publicValue(operation) };
-  if (typeof operation.dataJson === 'string' && operation.dataJson.trim()) {
-    try { result.data = publicValue(JSON.parse(operation.dataJson)); }
-    catch { result.dataError = 'Malformed Editor dataJson; inspect the preserved operation receipt.'; if (finished) result.ok = false; }
-  }
-  else {
-    const returned = operation.log?.find(entry => entry.type === 'Return')?.message;
-    if (returned) {
-      try { result.data = publicValue(JSON.parse(returned)); } catch { result.returnValue = returned; }
-    }
-  }
-  return result;
-}
+const publicValue = redactBridgeMetadata;
 
 export function createServer(root) {
   const server = new McpServer({ name: 'unity-agent-kit', version }, { instructions:
-    'This server controls one local Unity project. Inspect status, acquire a lease with your task ID, and keep that lease through refresh, Play, profiling and cleanup. A pending operation ID is not completion. Poll operation status or wait; disconnecting or timing out never stops Unity code. Release only after cleanup. Files must already be integrated into the bound Editor checkout.' });
+    'This server controls one local Unity project. Inspect status and prepare isolated code changes and offline tests before acquiring a lease. Acquire with your task ID just before integrating selected changes into the bound Editor checkout, then keep ownership through refresh, checks, Play, profiling and cleanup. A pending operation ID is not completion. Poll operation status or wait; disconnecting or timing out never stops Unity code. Release only after cleanup. Read structured responses in data, method values in returnValue, and the acquired ownership token in lease.token.' });
 
   function register(name, description, shape, readOnlyHint, run) {
     server.registerTool(name, { description, inputSchema: z.strictObject(shape),
@@ -102,9 +76,9 @@ export function createServer(root) {
       throw new Error('Lease expired. Renew it before starting work.');
     return state;
   }
-  async function waitFor(id, waitMs) {
+  async function waitFor(id, waitMs, options = {}) {
     const waited = await awaitResult(root, id, { timeoutMs: waitMs, pollMs: 25, cancelOnTimeout: false });
-    const result = outcome(readOperation(root, id));
+    const result = normalizeOperation(root, readOperation(root, id), options);
     if (result.pending) result.reason = waited.reason;
     return result;
   }
@@ -118,22 +92,22 @@ export function createServer(root) {
     const operationId = writeRequest(root, verb, { ...payload, leaseToken: args.leaseToken ?? '',
       expectedSession: snapshot.sessionId, expectedEpoch: args.expectedEpoch ?? 0,
       requiredReceipt: args.after ?? '', deadlineMs: Date.now() + timeoutMs });
-    const result = await waitFor(operationId, Math.min(args.waitMs ?? 1000, timeoutMs));
+    const result = await waitFor(operationId, Math.min(args.waitMs ?? 1000, timeoutMs), { details: args.details, kind: verb });
     if (result.pending) result.accepted = true;
     return result;
   }
 
-  register('unity_status', 'Read bound project identity, bridge heartbeat, ownership, and live Editor status. Works without an Editor.', waitFields, true, async args => {
+  register('unity_status', 'Read compact project identity, heartbeat, ownership and live Editor status. Use details=true for full assembly inventory. Works without an Editor.', waitFields, true, async args => {
     const local = localStatus();
     if (!local.responsive && !local.snapshot?.blocked) return { ok: true, local, reason: 'no-responsive-editor', runtime: null };
-    return { ...await dispatch('status', { payloadJson: '{}' }, args), local };
+    return { ...await dispatch('status', { payloadJson: JSON.stringify({ details: args.details }) }, args), local };
   });
   register('unity_capabilities', 'Discover loaded bridge versions and commands. A filter of at least three characters also lists matching static methods. Use offset and limit to page results; inspect scanTruncated for incomplete scans.', {
     ...waitFields, filter: z.string().trim().max(500).refine(value => value.length === 0 || value.length >= 3, 'Filter needs at least three characters').default(''),
     offset: z.number().int().min(0).max(2147483647).default(0), limit: z.number().int().min(1).max(200).default(100),
-  }, true, args => dispatch('capabilities', { payloadJson: JSON.stringify({ filter: args.filter, offset: args.offset, limit: args.limit }) }, args));
+  }, true, args => dispatch('capabilities', { payloadJson: JSON.stringify({ filter: args.filter, offset: args.offset, limit: args.limit, details: args.details }) }, args));
 
-  register('unity_lease_acquire', 'Acquire exclusive Editor ownership or receive a FIFO ticket. Retry with the same owner and ticket. This call does not wait in the queue.', {
+  register('unity_lease_acquire', 'Acquire Editor ownership just before integration and return lease.token, or receive a FIFO ticket. Retry with the same owner and ticket. This call does not wait in the queue.', {
     owner, ttlMs: z.number().int().min(1000).max(3600000).default(300000),
     timeoutMs: z.number().int().min(1).max(3600000).default(120000).describe('Lifetime of the FIFO ticket.'), ticket: id.optional(),
   }, false, args => acquireLease(root, { ...args, wait: false }));
@@ -162,7 +136,7 @@ export function createServer(root) {
     if (args.probe) payload.probe = args.probe;
     return dispatch('refresh', { payloadJson: JSON.stringify(payload) }, args, true);
   });
-  register('unity_invoke', 'Invoke an exact static method or Unity menu path. Supply exactly one of method/menu. A returned false is a successful invocation; use unity_check for assertions.', {
+  register('unity_invoke', 'Invoke an exact static method or Unity menu path. Read its typed value in returnValue. Supply exactly one of method/menu. A returned false is a successful invocation; use unity_check for assertions.', {
     ...leaseFields, ...requestFields, method: text.optional(), menu: text.optional(), args: z.array(z.string().max(65536)).max(100).default([]),
   }, false, args => {
     if (!!args.method === !!args.menu || args.menu && args.args.length) throw new Error('Supply exactly one of method/menu; menu invocations take no args.');
@@ -172,14 +146,14 @@ export function createServer(root) {
     ...leaseFields, ...requestFields, method: text, args: z.array(z.string().max(65536)).max(100).default([]),
   }, false, args => dispatch('check', { method: args.method, args: args.args }, args, true));
 
-  register('unity_operation_status', 'Read the durable state/result of an operation without enqueueing another Editor request.', { id }, true,
-    args => outcome(readOperation(root, args.id)));
+  register('unity_operation_status', 'Read the durable state/result of an operation without enqueueing another Editor request.', { id, ...detailFields }, true,
+    args => normalizeOperation(root, readOperation(root, args.id), args));
   register('unity_operation_wait', 'Wait up to 5 seconds for an existing operation. Returns pending if unfinished; it does not cancel or retry work.', {
-    id, waitMs: z.number().int().min(0).max(5000).default(1000),
-  }, true, args => waitFor(args.id, args.waitMs));
+    id, ...detailFields, waitMs: z.number().int().min(0).max(5000).default(1000),
+  }, true, args => waitFor(args.id, args.waitMs, args));
   register('unity_operation_list', 'List recent durable operation receipts from the bound project.', {
-    limit: z.number().int().min(1).max(1000).default(20),
-  }, true, args => ({ ok: true, operations: listOperations(root, args.limit).map(outcome) }));
+    ...detailFields, limit: z.number().int().min(1).max(1000).default(20),
+  }, true, args => ({ ok: true, operations: listOperations(root, args.limit).map(operation => normalizeOperation(root, operation, args)) }));
   register('unity_operation_cancel', 'Cancel your queued operation by atomic claim. Running code cannot be interrupted; inspect the returned state before retrying.', {
     id, ...leaseFields,
   }, false, args => {
@@ -187,7 +161,8 @@ export function createServer(root) {
     const operation = readOperation(root, args.id);
     if (!terminalStates.has(operation.state) && operation.leaseToken !== args.leaseToken)
       throw new Error('Operation is unknown or belongs to another lease.');
-    return { ok: true, ...publicValue(cancelQueued(root, args.id)) };
+    const cancellation = cancelQueued(root, args.id);
+    return normalizeCancellation(root, cancellation);
   });
 
   register('unity_play_start', 'Start a bounded Play scenario with explicit project-owned static callbacks. Keep the lease until status confirms terminal cleanup. Start completion only acknowledges the session.', {
@@ -195,7 +170,7 @@ export function createServer(root) {
     setupMethod: text.optional(), stepMethod: text.optional(), checkMethod: text.optional(), teardownMethod: text.optional(),
     screenshotPath: text.optional(), durationSeconds: z.number().gt(0).max(600).default(10), warmupSeconds: z.number().min(0).max(60).default(0.5),
   }, false, args => {
-    const { waitMs, timeoutMs, after, expectedEpoch, ...scenario } = args;
+    const { waitMs, timeoutMs, after, expectedEpoch, details, ...scenario } = args;
     return dispatch('session', { payloadJson: JSON.stringify({ ...scenario, action: 'start' }) }, args, true);
   });
   register('unity_play_status', 'Inspect the latest or specified Play session, including verification and cleanup. Does not require ownership.', {
@@ -241,8 +216,7 @@ export function createServer(root) {
     request.deadlineMs = Date.now() + args.timeoutMs;
     const result = await dispatch('invoke', { method: 'UnityAgentKit.Doctor.KitProfiler.Execute', args: [JSON.stringify(request)] }, args,
       !readonlyProfiler.has(args.action), ['stop', 'cancel'].includes(args.action));
-    if (result.data?.ok === false) result.ok = false;
-    return result;
+    return normalizeProfiler(result);
   });
   register('unity_profiler_compare', 'Compare two saved analyze JSON exports under the bound project. Reports context mismatches and unknown comparability; does not load captures into Unity.', {
     before: text, after: text, limit: z.number().int().min(1).max(1000).default(100),

@@ -42,7 +42,7 @@ async function main() {
         if (parsed.out) writeFileSync(parsed.out, JSON.stringify(data, null, 2), { flag: 'wx' });
         console.log(JSON.stringify(data)); return 0;
       }
-      const result = await executeProfiler(profilerRoot, profilerRequest(parsed), { writeRequest, awaitResult, timeoutMs: parsed.timeoutMs, leaseToken: parsed.lease });
+      const result = await executeProfiler(profilerRoot, profilerRequest(parsed), { writeRequest, awaitResult, timeoutMs: parsed.timeoutMs, leaseToken: parsed.lease, details: parsed.details });
       if (parsed.out && result.ok) {
         const { writeFileSync } = await import('node:fs');
         writeFileSync(parsed.out, JSON.stringify(result, null, 2), { flag: 'wx' });

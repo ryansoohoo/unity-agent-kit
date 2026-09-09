@@ -37,8 +37,9 @@ namespace UnityAgentKit.Doctor
         }
         [Serializable] internal sealed class Result
         {
-            public string id, state, code, error, sessionId, projectPath, dataJson;
-            public bool ok;
+            public string id, verb, method, state, code, error, sessionId, projectPath, dataJson;
+            public string returnType, returnJson;
+            public bool ok, hasReturnValue;
             public int startedEpoch, finishedEpoch, droppedLogLines;
             public long startedMs, completedMs;
             public List<LogLine> log = new List<LogLine>();
@@ -48,7 +49,8 @@ namespace UnityAgentKit.Doctor
         [Serializable] sealed class ActionName { public string action; }
         [Serializable] sealed class PlayLease { public string state, leaseToken, editorSession; }
         [Serializable] sealed class CaptureLease { public string leaseToken, editorSession; public bool active; }
-        sealed class PendingTask { internal Request request; internal Result result; internal Task task; }
+        [Serializable] sealed class StringValue { public string value; }
+        sealed class PendingTask { internal Request request; internal Result result; internal Task task; internal Type returnType; }
 
         internal static long Now => DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         internal static bool ValidId(string id) => !string.IsNullOrEmpty(id) && id.Length <= 128 && id.All(c => char.IsLetterOrDigit(c) || c == '-' || c == '_');
@@ -94,7 +96,7 @@ namespace UnityAgentKit.Doctor
         }
 
         static Result NewResult(Request req) => new Result {
-            id = req.id, state = "running", startedMs = Now, startedEpoch = KanaboEpoch.CurrentEpoch,
+            id = req.id, verb = req.verb, method = req.method, state = "running", startedMs = Now, startedEpoch = KanaboEpoch.CurrentEpoch,
             sessionId = KanaboEpoch.CurrentSession, projectPath = ProjectPath
         };
 
@@ -208,11 +210,12 @@ namespace UnityAgentKit.Doctor
                 : method.Invoke(null, bound);
             if (returned is Task task)
             {
-                Tasks.Add(req.id, new PendingTask { request = req, result = result, task = task });
+                Tasks.Add(req.id, new PendingTask { request = req, result = result, task = task,
+                    returnType = method.ReturnType.GetProperty("Result")?.PropertyType ?? typeof(void) });
                 WriteOperation(result);
                 return;
             }
-            FinishValue(req, result, returned);
+            FinishValue(req, result, returned, method.ReturnType);
         }
 
         internal static MethodInfo ResolveMethod(string name, int argc)
@@ -245,15 +248,20 @@ namespace UnityAgentKit.Doctor
                 try
                 {
                     pending.task.GetAwaiter().GetResult();
-                    var property = pending.task.GetType().GetProperty("Result", BindingFlags.Public | BindingFlags.Instance);
-                    FinishValue(pending.request, pending.result, property?.GetValue(pending.task));
+                    var property = pending.returnType == typeof(void) ? null : pending.task.GetType().GetProperty("Result", BindingFlags.Public | BindingFlags.Instance);
+                    FinishValue(pending.request, pending.result, property?.GetValue(pending.task), pending.returnType);
                 }
                 catch (Exception e) { Finish(pending.request, pending.result, false, "execution_failed", Unwrap(e)); }
             }
         }
 
-        static void FinishValue(Request req, Result result, object value)
+        // Return logs remain for older clients. Additive metadata lets current clients
+        // distinguish bool false, string "False", null and void without guessing from ToString().
+        static void FinishValue(Request req, Result result, object value, Type declaredType)
         {
+            result.hasReturnValue = declaredType != typeof(void);
+            result.returnType = (value?.GetType() ?? declaredType).FullName;
+            result.returnJson = ReturnJson(value, declaredType);
             if (value != null) AddLog(result, "Return", value.ToString(), "");
             if (req.verb != "check") { Finish(req, result, true, "completed", null); return; }
             if (value is bool passed) { Finish(req, result, passed, passed ? "passed" : "check_failed", passed ? null : "Check returned false"); return; }
@@ -267,6 +275,28 @@ namespace UnityAgentKit.Doctor
             if (check.ok != presence.ok) throw new ArgumentException("check result has no explicit boolean ok field");
             result.dataJson = json;
             Finish(req, result, check.ok, check.ok ? "passed" : "check_failed", check.ok ? null : check.error ?? "Check returned ok=false");
+        }
+
+        internal static string ReturnJson(object value, Type declaredType)
+        {
+            if (declaredType == typeof(void)) return null;
+            if (value == null) return "null";
+            if (value is bool b) return b ? "true" : "false";
+            if (value is string || value is char || value is Enum || value is long || value is ulong || value is decimal)
+                return Quote(Convert.ToString(value, CultureInfo.InvariantCulture));
+            if (value is float f) return float.IsNaN(f) || float.IsInfinity(f) ? Quote(f.ToString("R", CultureInfo.InvariantCulture)) : f.ToString("R", CultureInfo.InvariantCulture);
+            if (value is double d) return double.IsNaN(d) || double.IsInfinity(d) ? Quote(d.ToString("R", CultureInfo.InvariantCulture)) : d.ToString("R", CultureInfo.InvariantCulture);
+            if (value is byte || value is sbyte || value is short || value is ushort || value is int || value is uint)
+                return Convert.ToString(value, CultureInfo.InvariantCulture);
+            // Arbitrary object ToString() is display text, not a serialization contract.
+            return null;
+        }
+
+        static string Quote(string value)
+        {
+            var wrapped = JsonUtility.ToJson(new StringValue { value = value });
+            const string prefix = "{\"value\":";
+            return wrapped.Substring(prefix.Length, wrapped.Length - prefix.Length - 1);
         }
 
         internal static string ValidateLease(string token) => ValidateLease(token, null);

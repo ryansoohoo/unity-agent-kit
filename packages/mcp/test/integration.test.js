@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readdirSync, realpathSync, renameSync, rmSync, existsSync, unlinkSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, readdirSync, realpathSync, renameSync, rmSync, existsSync, unlinkSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -40,7 +40,7 @@ function project(t, editor = true) {
     finally { rmSync(root, { recursive: true, force: true }); }
   });
   fake.complete = (request, result = {}) => {
-    const operation = { id: request.id, state: 'completed', ok: true, startedMs: Date.now(), completedMs: Date.now(),
+    const operation = { id: request.id, verb: request.verb, method: request.method, state: 'completed', ok: true, startedMs: Date.now(), completedMs: Date.now(),
       startedEpoch: 4, finishedEpoch: 4, sessionId: fake.sessionId, projectPath: root, dataJson: '', error: '', log: [], ...result };
     publish(join(operationDir(root), `${request.id}.json`), operation);
     publish(join(resDir(root), `${request.id}.json`), operation);
@@ -59,21 +59,32 @@ function project(t, editor = true) {
           catch (error) { if (error.code === 'ENOENT') continue; throw error; }
           const request = readJson(join(runningDir(root), name));
           fake.requests.push(request);
-          publish(join(operationDir(root), name), { id: request.id, state: 'running', ok: false, startedMs: Date.now(), dataJson: '', error: '', log: [] });
+          publish(join(operationDir(root), name), { id: request.id, verb: request.verb, method: request.method, state: 'running', ok: false, startedMs: Date.now(), dataJson: '', error: '', log: [] });
           if (fake.hold) continue;
           if (request.verb === 'status' || request.verb === 'capabilities') {
             const query = JSON.parse(request.payloadJson);
             if (request.verb === 'capabilities') {
-              assert.deepEqual(Object.keys(query).sort(), ['filter', 'limit', 'offset']);
+              assert.deepEqual(Object.keys(query).sort(), ['details', 'filter', 'limit', 'offset']);
               assert.ok(query.limit >= 1 && query.limit <= 200);
               assert.ok(query.filter.length === 0 || query.filter.length >= 3);
             }
-            fake.complete(request, { dataJson: JSON.stringify({ projectPath: root, sessionId: fake.sessionId, protocol: 2, commands: ['status', 'invoke'], ...query }) });
+            fake.complete(request, { dataJson: JSON.stringify({ projectPath: root, sessionId: fake.sessionId, protocol: 2,
+              runtimeVersion: KIT_VERSION, commands: ['status', 'invoke'], assemblyCount: 2, assembliesIncluded: query.details,
+              assemblies: query.details ? [{ name: 'Assembly-CSharp' }, { name: 'UnityAgentKit.Doctor.Editor' }] : [], ...query }) });
           } else if (request.method === 'UnityAgentKit.Doctor.KitProfiler.Execute') {
-            fake.complete(request, { log: [{ type: 'Return', message: JSON.stringify({ ok: true, data: { action: JSON.parse(request.args[0]).action } }) }] });
-          } else if (request.verb === 'invoke') fake.complete(request, { log: [{ type: 'Return', message: request.method === 'Fixture.StructuredGetter' ? '{"ok":false,"value":17}' : 'false' }] });
+            const value = JSON.stringify(fake.profilerResponse ?? { ok: true, data: { action: JSON.parse(request.args[0]).action } });
+            fake.complete(request, { returnType: 'System.String', hasReturnValue: true, returnJson: JSON.stringify(value), log: [{ type: 'Return', message: value }] });
+          } else if (request.verb === 'invoke') {
+            const value = request.method === 'Fixture.StructuredGetter' ? '{"ok":false,"value":17}'
+              : request.method === 'Fixture.FalseStringGetter' ? 'False' : false;
+            fake.complete(request, { returnType: typeof value === 'boolean' ? 'System.Boolean' : 'System.String',
+              hasReturnValue: true, returnJson: JSON.stringify(value), log: [{ type: 'Return', message: value === false ? 'False' : value }] });
+          }
           else if (request.verb === 'check') fake.complete(request, { state: 'failed', ok: false, error: 'Check returned false' });
-          else if (request.verb === 'session') fake.complete(request, { dataJson: JSON.stringify({ ok: true, id: 'play-test', state: 'running' }) });
+          else if (request.verb === 'session') {
+            fake.playLeaseToken ||= request.leaseToken;
+            fake.complete(request, { dataJson: JSON.stringify({ ok: true, id: 'play-test', state: 'running', leaseToken: fake.playLeaseToken }) });
+          }
           else fake.complete(request, { dataJson: '{"ok":true,"outcome":"fake-dispatch-only"}' });
         }
       } catch (error) { fake.errors.push(error); }
@@ -107,6 +118,16 @@ test('SDK handshake, discovery, bound status and exact capability pagination wor
   const status = await call('unity_status');
   assert.equal(status.local.projectPath, fake.root);
   assert.equal(status.data.sessionId, fake.sessionId);
+  assert.equal(status.state, 'completed');
+  assert.equal(status.pending, false);
+  assert.equal(status.data.assemblyCount, 2);
+  assert.equal(status.data.assembliesIncluded, false);
+  assert.equal(status.data.assemblies, undefined);
+  assert.equal(status.operation.dataJson, undefined);
+  const detailed = await call('unity_status', { details: true });
+  assert.equal(detailed.data.assembliesIncluded, true);
+  assert.equal(detailed.data.assemblies.length, detailed.data.assemblyCount);
+  assert.equal(JSON.parse(detailed.operation.dataJson).assemblies.length, 2);
   const found = await call('unity_capabilities', { filter: 'Fixture', offset: 9, limit: 200 });
   assert.equal(found.data.offset, 9);
   assert.equal(found.data.limit, 200);
@@ -133,13 +154,22 @@ test('two SDK clients share FIFO ownership; tokenless and wrong-owner mutations 
   assert.equal(fake.requests.length, before);
   const invoked = await a.call('unity_invoke', { method: 'Fixture.FalseGetter', args: ['spaces "quotes" $(literal)'], leaseToken });
   assert.equal(invoked.ok, true, 'false getter is a successful invocation');
-  assert.equal(invoked.data, false);
+  assert.equal(invoked.data, null);
+  assert.equal(invoked.returnValue, false);
+  assert.equal(invoked.returnType, 'System.Boolean');
+  assert.equal(invoked.returnValueKnown, true);
   assert.deepEqual(fake.requests.at(-1).args, ['spaces "quotes" $(literal)']);
   assert.equal(fake.requests.at(-1).leaseToken, leaseToken);
   assert.equal(fake.requests.at(-1).expectedSession, fake.sessionId);
   const structured = await a.call('unity_invoke', { method: 'Fixture.StructuredGetter', leaseToken });
   assert.equal(structured.ok, true, 'generic invoke does not turn a returned object into an assertion');
-  assert.deepEqual(structured.data, { ok: false, value: 17 });
+  assert.equal(structured.data, null);
+  assert.equal(structured.returnValue, '{"ok":false,"value":17}');
+  assert.equal(structured.returnType, 'System.String');
+  const falseString = await a.call('unity_invoke', { method: 'Fixture.FalseStringGetter', leaseToken });
+  assert.equal(falseString.returnValue, 'False');
+  assert.equal(falseString.returnType, 'System.String');
+  assert.equal(falseString.ok, true);
   const checked = await a.call('unity_check', { method: 'Fixture.Check', leaseToken });
   assert.equal(checked.ok, false);
   assert.equal(checked.operation.error, 'Check returned false');
@@ -162,14 +192,16 @@ test('source hashes, receipt gate, Play lifecycle and profiler query/mutation ar
   await call('unity_check', { leaseToken, method: 'Fixture.Check', after: refreshed.id, expectedEpoch: 4 });
   assert.equal(fake.requests.at(-1).requiredReceipt, refreshed.id);
   assert.equal(fake.requests.at(-1).expectedEpoch, 4);
-  await call('unity_play_start', { leaseToken, setupMethod: 'Fixture.Setup', checkMethod: 'Fixture.Check', durationSeconds: 1 });
+  const started = await call('unity_play_start', { leaseToken, setupMethod: 'Fixture.Setup', checkMethod: 'Fixture.Check', durationSeconds: 1 });
+  assert.equal(JSON.stringify(started).includes(leaseToken), false);
   assert.equal(JSON.parse(fake.requests.at(-1).payloadJson).leaseToken, leaseToken);
-  await call('unity_play_status', { id: 'play-test' });
+  const playStatus = await call('unity_play_status', { id: 'play-test', details: true });
+  assert.equal(JSON.stringify(playStatus).includes(leaseToken), false);
   assert.equal(fake.requests.at(-1).leaseToken, '');
   await call('unity_play_stop', { id: 'play-test', leaseToken });
   assert.equal(JSON.parse(fake.requests.at(-1).payloadJson).action, 'stop');
   const query = await call('unity_profiler', { action: 'frames', options: { first: 0, last: 5, limit: 3 } });
-  assert.equal(query.data.data.action, 'frames');
+  assert.equal(query.data.action, 'frames');
   assert.equal(fake.requests.at(-1).leaseToken, '');
   const before = fake.requests.length;
   assert.equal((await raw('unity_profiler', { action: 'start' })).isError, true);
@@ -199,7 +231,8 @@ test('bounded waits and MCP cancellation preserve running work and its durable r
   assert.equal(accepted.pending, true);
   assert.equal(accepted.accepted, true);
   assert.equal(accepted.operation.state, 'running');
-  assert.equal(accepted.operation.dataJson, '', 'empty C# dataJson must preserve the running receipt and its id');
+  assert.equal(accepted.operation.dataJson, undefined);
+  assert.equal((await call('unity_operation_status', { id: accepted.id, details: true })).operation.dataJson, '');
   assert.ok(existsSync(join(runningDir(fake.root), `${accepted.id}.json`)));
   assert.equal((await call('unity_operation_cancel', { id: accepted.id, leaseToken })).cancelled, false);
   assert.equal((await call('unity_lease_release', { leaseToken })).reason, 'work-still-running');
@@ -241,11 +274,65 @@ test('explicit cancellation can remove queued work; disconnected clients leave i
   assert.equal(queued.operation.state, 'queued');
   await a.client.close();
   const b = await connect(t, fake);
-  assert.equal((await b.call('unity_operation_status', { id: queued.id })).operation.state, 'queued');
-  const cancelled = await b.call('unity_operation_cancel', { id: queued.id, leaseToken });
+  const observation = await b.call('unity_operation_status', { id: queued.id, details: true });
+  assert.equal(observation.operation.state, 'queued');
+  assert.equal(JSON.stringify(observation).includes(leaseToken), false);
+  const response = await b.raw('unity_operation_cancel', { id: queued.id, leaseToken });
+  assert.equal(response.isError, false, 'successfully cancelling queued work is a successful tool call');
+  const cancelled = content(response);
+  assert.equal(cancelled.ok, true);
   assert.equal(cancelled.cancelled, true);
   assert.equal(cancelled.operation.state, 'cancelled');
   assert.equal(existsSync(join(reqDir(fake.root), `${queued.id}.json`)), false);
+});
+
+test('profiler failures keep the same outcome when recovered through status, wait or list', async t => {
+  const fake = project(t), { call, raw } = await connect(t, fake);
+  fake.profilerResponse = { ok: false, error: 'Fixture capture failure', data: null };
+  const direct = await raw('unity_profiler', { action: 'status' });
+  assert.equal(direct.isError, true);
+  assert.equal(content(direct).invocationOk, true);
+  fake.hold = true;
+  const pending = await call('unity_profiler', { action: 'status', waitMs: 50 });
+  assert.equal(pending.pending, true);
+  const value = JSON.stringify(fake.profilerResponse);
+  fake.complete(fake.requests.find(request => request.id === pending.id), { returnType: 'System.String',
+    hasReturnValue: true, returnJson: JSON.stringify(value), log: [{ type: 'Return', message: value }] });
+  for (const name of ['unity_operation_status', 'unity_operation_wait']) {
+    const response = await raw(name, { id: pending.id });
+    assert.equal(response.isError, true);
+    assert.equal(content(response).ok, false);
+    assert.equal(content(response).invocationOk, true);
+    assert.equal(content(response).error, content(direct).error);
+  }
+  const listed = (await call('unity_operation_list')).operations.find(operation => operation.id === pending.id);
+  assert.equal(listed.ok, false);
+  assert.equal(listed.pending, false);
+  assert.equal(listed.error, content(direct).error);
+});
+
+test('refresh metadata observations redact nested ownership without changing the raw receipt', async t => {
+  const fake = project(t), { call } = await connect(t, fake);
+  const leaseToken = (await call('unity_lease_acquire', { owner: 'task-redaction' })).lease.token;
+  writeFileSync(join(fake.root, 'Assets/Fixture.cs'), 'class Fixture {}');
+  fake.hold = true;
+  const pending = await call('unity_refresh', { leaseToken, files: ['Assets/Fixture.cs'], waitMs: 50 });
+  const request = fake.requests.find(request => request.id === pending.id);
+  fake.complete(request, { dataJson: JSON.stringify({ request: { ...request,
+    payloadJson: JSON.stringify({ leaseToken, nested: { token: leaseToken } }) }, proof: 'retained' }) });
+  const path = join(resDir(fake.root), `${pending.id}.json`), original = readFileSync(path, 'utf8');
+  assert.ok(original.includes(leaseToken));
+  for (const details of [false, true]) {
+    for (const name of ['unity_operation_status', 'unity_operation_wait']) {
+      const observed = await call(name, { id: pending.id, details });
+      assert.equal(JSON.stringify(observed).includes(leaseToken), false);
+      assert.equal(observed.data.proof, 'retained');
+      assert.equal(observed.rawReceiptPath, path);
+    }
+    const listed = await call('unity_operation_list', { details });
+    assert.equal(JSON.stringify(listed).includes(leaseToken), false);
+  }
+  assert.equal(readFileSync(path, 'utf8'), original);
 });
 
 test('missing Editor and malformed arguments produce useful responses without creating executable requests', async t => {

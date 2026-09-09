@@ -1,10 +1,10 @@
 # Editor operations
 
-The kit's protocol 2 connects the Node CLI or local MCP server to the installed UPM Editor service. See [setup](setup.md) for Codex, Claude Code and Cursor installation. Run `node <kit-checkout>/packages/cli/bin/kit.js --help`; CLI examples below abbreviate that command to `kit`. Pass the Unity project path explicitly when working from a different checkout.
+The kit's protocol 2 connects the Node CLI or local MCP server to the installed UPM Editor service. See [setup](setup.md) for Codex, Claude Code and Cursor installation. Read the project's MCP configuration to locate the installed launcher before searching global plugin caches. Run `node <kit-checkout>/packages/cli/bin/kit.js --help`; CLI examples below abbreviate that command to `kit`. Pass the target Unity project path explicitly.
 
 ## MCP tools
 
-The installed `unity-agent-kit` server is bound to the configured project. Start with `unity_status` and `unity_capabilities`. For a change, the corresponding tool sequence is:
+The installed `unity-agent-kit` server is bound to the configured project. Start with `unity_status` and `unity_capabilities`. Prepare the change and run offline tests in an isolated worktree. Then acquire ownership, integrate the selected source into the Editor's checkout, and verify it:
 
 ```text
 unity_lease_acquire {"owner":"my-task"}
@@ -17,17 +17,28 @@ Use the returned token and successful refresh operation ID. If acquisition queue
 
 The server also exposes `unity_play_*` for Play lifecycle, `unity_profiler` for capture and queries, and `unity_profiler_compare` for comparisons. These use the same underlying operation, lease and evidence rules as the CLI below.
 
+## Read operation responses
+
+CLI and MCP Editor operation results share `id`, `state`, `ok` and `pending`. Check `pending` before interpreting `ok`; accepted work is not complete. `data` contains the bridge or service's structured response. Invocation results also include `returnValue`, its .NET `returnType`, and `returnValueKnown`. A returned string stays a string, even if it looks like JSON or `"False"`. Older receipts without typed return metadata retain display text with an unknown type; do not infer a boolean assertion from it.
+
+Use `check` for assertions. A generic `invoke` can succeed while its returned value describes failure. Profiler commands combine invocation success with the profiler service's own `ok` result. Receipts created by 0.6.1 retain the method identity needed for the same handling after polling; older receipts without that identity cannot provide equivalent profiler recovery. Keep the distinction between operation completion and the project behavior you intended to verify.
+
+For `op cancel`, top-level `ok` reports whether cancellation succeeded and matches `cancelled`. The nested `operation.ok` stays false because cancelled work did not complete. Successful cancellation therefore exits 0 in the CLI and is a successful MCP tool call.
+
+Routine responses omit duplicated JSON fields. `rawReceiptPath` points to the durable receipt with the original diagnostics and payload. Request CLI `--details` or MCP `details: true` for expanded receipt fields; presented bridge metadata still removes ownership tokens. Lease acquisition returns the ownership token at `lease.token`; supply it as `leaseToken` to MCP mutations or `--lease` to CLI commands.
+
 ## Discover the running installation
 
 ```text
 kit status <project> --json
 kit capabilities <project> --json
+kit status <project> --details --json
 kit methods <project> --filter Namespace.Type --json
 ```
 
-Status reports the selected project, session and readiness alongside CLI package path, version, protocol and source hash. `sourceHashPath` and `sourceHashScope` identify the exact hashed file; this hash does not cover the full CLI or its dependencies. Capabilities reports the Editor service and loaded assembly identities. Use these to identify stale copies before diagnosing code behavior. A responsive Editor is not proof that a recent edit compiled.
+Status reports the selected project, session and readiness alongside CLI package path, version and protocol. Detailed CLI status also includes a source hash. `sourceHashPath` and `sourceHashScope` identify the exact hashed file; this hash does not cover the full CLI or its dependencies. Status and capabilities summarize assembly inventories by default, with `assemblyCount`, `assembliesIncluded` and `detailsAvailable`. Run a fresh status or capabilities request with details to inspect loaded assembly identities. Expanding an old compact receipt cannot reconstruct an inventory it never recorded. Use these to identify stale copies before diagnosing code behavior. A responsive Editor is not proof that a recent edit compiled.
 
-Local skill candidates report paths, SHA-256 hashes and available version metadata for unity-verify, unity-recipes and unity-topology. Discovery checks known project, user, source and plugin-cache locations, with at most four cached versions per provider. These are candidates, not evidence of which skill text was injected into an agent. `injectionKnown` remains false.
+Detailed local skill candidates report paths, SHA-256 hashes and available version metadata for unity-verify, unity-recipes and unity-topology. Discovery checks known project, user, source and plugin-cache locations, with at most four cached versions per provider. Routine status summarizes that inventory. These are candidates, not evidence of which skill text was injected into an agent. `injectionKnown` remains false. Prefer the project's copied skills, and inspect details when a stale installation is suspected.
 
 ## Own a sequence of operations
 
@@ -38,11 +49,13 @@ kit lease renew <project> --lease <token> --json
 kit lease release <project> --lease <token> --json
 ```
 
-The token covers the full sequence of source integration, refresh, checks, Play, profiling and restoration. The default lease lifetime is 300000 ms; use `--ttl-ms` and renew for longer work. Hold ownership before editing the shared checkout.
+Prepare source changes and run offline tests in isolated worktrees first. Acquire the token just before integration into the Editor's checkout and retain it through refresh, checks, Play, profiling and restoration. Release before returning to unrelated offline work. The default lease lifetime is 300000 ms; use `--ttl-ms` and renew for longer Editor work. Editing the shared checkout before acquisition does not safely shorten the lease.
 
 Without `--wait`, acquisition returns ownership or `reason: "queued"` with a ticket and queue position. Resume with `lease acquire --owner <same-owner> --ticket <ticket>`, optionally adding `--wait`. A queued result has exit code 1, so inspect its reason rather than treating it as a failed Editor action. Cancel a ticket with `lease cancel --ticket <ticket>`. Tickets have deadlines; a new request is needed after expiry.
 
-An expired lease remains reserved while tracked operations, a Play session or a profiler capture are active. Release refuses active work. The lease does not guard raw filesystem writes, legacy clients or actions outside this protocol. It does not integrate another worktree's source. Integrate reviewed changes into the Editor's existing checkout before verification; do not switch a dirty user checkout or copy its `Library` to another project.
+An expired lease remains reserved while tracked operations, a Play session or a profiler capture are active. Release refuses active work. The lease does not guard raw filesystem writes, legacy clients or actions outside this protocol. Assign serialized scene and prefab ownership separately.
+
+The Editor sees only its own checkout. Integrate reviewed commits or selected patches before verification. If the starting work includes uncommitted edits, deliberately include the required tracked and untracked files; creating a worktree alone does not copy them. Preserve unrelated user changes, do not switch a dirty user checkout, and do not copy its `Library` to another project. The bridge has no automatic branch-switching or integration service.
 
 ## Prove a refresh, then invoke
 
@@ -64,7 +77,9 @@ There is no Alt-Tab step in this workflow. The bridge explicitly calls `AssetDat
 
 Background verification was exercised in a disposable graphical Editor on Windows with Unity 6000.5.5f1. The Editor stayed unfocused through a refresh that loaded changed code, a Play scenario, and a Game-view PNG capture. A source reload during Play also restored the original scene, time scale and run-in-background value. This is evidence for that tested Editor configuration, not a guarantee of progress through modal dialogs or arbitrary callback failures.
 
-Take the receipt ID from a successful refresh result. `--after` rejects changed session, epoch, asset revision, requested content or assembly identity. If it is stale, investigate and refresh the current inputs again. An asset-only import or no-op does not prove C# compilation. A `check` returning boolean false fails; `invoke` is available for static methods and menu actions, but successful invocation alone does not assert behavior.
+Take the receipt ID from a successful refresh result. `--after` rejects changed session, epoch, asset revision, requested content or assembly identity. If it is stale, investigate and refresh the current inputs again. An asset-only import or no-op does not prove C# compilation. A `check` returning boolean false or structured `ok: false` fails; `invoke` is available for static methods and menu actions, but successful invocation alone does not assert behavior.
+
+For configuration and behavior claims, use a project proof method that inspects the intended loaded component, serialized asset or runtime system. A returned settings draft or getter may describe a different copy from the one the game consumes. Apply the change, check that actual state, and report the assertion performed. A bridge receipt proves the code and inputs that reached Unity; it cannot infer whether a project-specific setting took effect.
 
 ## Observe or cancel work
 

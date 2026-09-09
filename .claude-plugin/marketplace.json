@@ -12,7 +12,7 @@
       "name": "unity-agent-kit",
       "source": "./plugin",
       "description": "Agent-ready Unity: verified git hygiene doctor, three-tier verification skills, safe parallel topology, CLAUDE.md generator. Windows + Unity 6 verified.",
-      "version": "0.6.0",
+      "version": "0.6.1",
       "author": {
         "name": "Ryan Soohoo"
       },

@@ -44,7 +44,7 @@ try {
     assert.ok(evidence.tools.includes(name), `Missing ${name}`);
   const status = await completed(a, await call(a, 'unity_status'));
   assert.equal(status.ok, true);
-  assert.equal(status.data.runtimeVersion, '0.6.0');
+  assert.equal(status.data.runtimeVersion, '0.6.1');
   assert.equal(status.data.editorFocused, false, 'Proof requires Unity to stay in the background');
   const initialBackground = status.data.runInBackground;
   const discovery = await completed(a, await call(a, 'unity_capabilities', { filter: 'PlaySessionProof', limit: 200 }));

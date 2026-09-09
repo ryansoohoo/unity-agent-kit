@@ -49,6 +49,11 @@ test('timeout delegates cancellation to the common protocol and preserves uncert
     } });
     assert.equal(result.cancelledBeforeStart, cancelled);
     assert.equal(result.operation.id, 'mine');
+    assert.equal(result.id, 'mine');
+    assert.equal(result.state, cancelled ? 'cancelled' : 'unknown');
+    assert.equal(result.pending, false);
+    assert.equal(result.data, null);
+    assert.match(result.rawReceiptPath, /(?:res|ops)[\\/]mine.json$/);
     if (!cancelled) assert.match(result.error, /uncertain/);
   }
 });
