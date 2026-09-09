@@ -60,6 +60,77 @@ test('session config must be an object before any request is queued', () => {
   assert.equal(existsSync(reqDir(root)), false);
 });
 
+test('op status preserves typed false and string False as distinct return values', () => {
+  const root = tmp('uak-cli-typed-');
+  mkdirSync(resDir(root), { recursive: true });
+  for (const [id, returnType, value] of [['bool', 'System.Boolean', false], ['string', 'System.String', 'False']]) {
+    writeFileSync(join(resDir(root), `${id}.json`), JSON.stringify({ id, verb: 'invoke', method: 'Proof.Read',
+      state: 'completed', ok: true, returnType, hasReturnValue: true, returnJson: JSON.stringify(value),
+      dataJson: '', log: [{ type: 'Return', message: 'False' }] }));
+    const r = run(['op', 'status', root, '--id', id, '--json'], root);
+    assert.equal(r.code, 0, r.out);
+    const result = JSON.parse(r.out);
+    assert.equal(result.ok, true, 'invoke success does not assert the returned boolean');
+    assert.equal(result.returnValue, value);
+    assert.equal(result.returnType, returnType);
+    assert.equal(result.returnValueKnown, true);
+    assert.equal(result.hasReturnValue, true);
+    assert.equal(result.data, null);
+  }
+});
+
+test('op status compacts legacy discovery and details restores inventories without rewriting evidence', () => {
+  const root = tmp('uak-cli-details-'), id = 'legacy-status';
+  mkdirSync(resDir(root), { recursive: true });
+  const assemblies = Array.from({ length: 120 }, (_, i) => ({ name: `Assembly${i}`, mvid: `identity${i}` }));
+  const dataJson = JSON.stringify({ protocol: 2, runtimeVersion: '0.6.0', commands: ['status'], assemblies });
+  const path = join(resDir(root), `${id}.json`);
+  // Older receipts omitted verb; discovery must still be recognized on recovery.
+  const raw = JSON.stringify({ id, state: 'completed', ok: true, dataJson, log: [] }, null, 2) + '\n';
+  writeFileSync(path, raw);
+  for (const details of [false, true]) {
+    const r = run(['op', 'status', root, '--id', id, '--json', ...(details ? ['--details'] : [])], root);
+    assert.equal(r.code, 0, r.out);
+    const result = JSON.parse(r.out);
+    assert.equal(result.data.assemblyCount, assemblies.length);
+    assert.equal(result.data.assembliesIncluded, details);
+    if (details) {
+      assert.deepEqual(result.data.assemblies, assemblies);
+      assert.equal(result.operation.dataJson, dataJson);
+    } else {
+      assert.equal(Object.hasOwn(result.data, 'assemblies'), false);
+      assert.equal(Object.hasOwn(result.operation, 'dataJson'), false);
+    }
+    assert.equal(result.rawReceiptPath, path);
+    assert.equal(readFileSync(path, 'utf8'), raw, 'formatting must leave the original receipt unchanged');
+  }
+});
+
+test('queued op cancellation exits successfully while preserving the cancelled operation outcome', () => {
+  const root = tmp('uak-cli-cancel-');
+  mkdirSync(dirname(epochPath(root)), { recursive: true });
+  writeFileSync(epochPath(root), JSON.stringify({ protocol: 2, sessionId: 'proof', epoch: 1,
+    heartbeatMs: Date.now(), state: 'ready' }));
+  const queued = run(['invoke', root, '--method', 'Proof.Run', '--async', '--json'], root);
+  assert.equal(queued.code, 0, queued.out);
+  const { id } = JSON.parse(queued.out);
+  assert.equal(existsSync(join(reqDir(root), `${id}.json`)), true);
+  const r = run(['op', 'cancel', root, '--id', id, '--json'], root);
+  assert.equal(r.code, 0, r.out);
+  const result = JSON.parse(r.out);
+  assert.equal(result.ok, true);
+  assert.equal(result.cancelled, true);
+  assert.equal(result.id, id);
+  assert.equal(result.state, 'cancelled');
+  assert.equal(result.pending, false);
+  assert.equal(result.operation.ok, false);
+  assert.equal(result.operation.code, 'cancelled_before_start');
+  assert.equal(existsSync(join(reqDir(root), `${id}.json`)), false);
+  const receipt = JSON.parse(readFileSync(result.rawReceiptPath, 'utf8'));
+  assert.equal(receipt.state, 'cancelled');
+  assert.equal(receipt.ok, false);
+});
+
 test('refresh omits an optional probe and rejects malformed probes before queueing', () => {
   const root = tmp('uak-refresh-probe-');
   const noProbe = run(['refresh', root, '--async'], root);

@@ -53,3 +53,32 @@ The pre-release bridge suite passed all 186 JavaScript tests. It covers request 
 ## Existing-project smoke check
 
 A separate smoke check loaded protocol 2 into an existing Windows Unity project while its Editor remained unfocused. A lease/invoke/release sequence passed, profiler status reported context schema 2 with recording off, and no new console errors appeared. The project's tracked diff remained unchanged. This check supplements the disposable fixtures; it does not establish correctness of any game's behavior.
+
+## 0.6.1 installation and response verification
+
+An existing Windows project was upgraded from its local 0.5.0 installation using
+the all-client installer and a dedicated kit clone. Configuration checks passed
+for Codex, Claude Code and Cursor, and `codex mcp get` confirmed the project
+binding. Two official MCP SDK clients connected using the generated configuration
+and discovered all 22 tools. This verifies the common transport and configuration,
+not each client's UI.
+
+The same Unity 6000.5.5f1 Editor remained unfocused throughout package resolution,
+source import and checks. A source receipt recorded compilation and reload from
+epoch 122 to 123 in 9.63 seconds. Routine MCP status was 2,925 bytes; a detailed
+request was 54,435 bytes and retained the full assembly inventory. These response
+sizes describe this project and installation, not a fixed limit.
+
+Native invocations distinguished boolean false, the string `"False"`, a float and
+a JSON-looking string. A false assertion failed, and a profiler request completed
+through operation polling. A project tuning probe rejected an absent runtime;
+its three-case self-test also checked successful application and a locked draft
+that differed from runtime state. The self-test restored the runtime binding,
+draft and seed state, and preserved the saved settings file. This is evidence for
+the probe and setter path, not gameplay behavior in Play mode.
+
+The installer and checks held the Editor lease for about 65 seconds. A second SDK
+client queued, acquired ownership after release, then released it. Final status
+showed no owner, active operations or queued tickets. The original clean scene,
+Play state and background setting were preserved, as were 713 pre-existing
+modified or untracked files and all unrelated package dependencies.
