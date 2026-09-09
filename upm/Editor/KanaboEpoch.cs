@@ -7,15 +7,14 @@ using UnityEngine;
 
 namespace UnityAgentKit.Doctor
 {
-    // Kanabō (v2, minimal): the reload-boundary correctness signal.
-    // Writes <project>/Temp/unity-agent-kit/epoch.json — epoch (per domain
-    // reload), 0.5 s heartbeat, compile/reload state, asset world-revision,
-    // and the reflected UAK.EpochProbe.Value used by the proof harness.
-    // Also answers Temp/unity-agent-kit/refresh.request with
-    // AssetDatabase.Refresh() — the explicit import trigger that works with
-    // the editor unfocused or headless.
-    // ZERO tool surface by design: no scene ops, no eval, no serializers.
-    // A status file out, one refresh verb in. That's all this will ever be.
+    // Kanabō: the reload-boundary correctness signal, plus (v3) the file
+    // request channel it pumps. Writes <project>/Temp/unity-agent-kit/epoch.json —
+    // epoch (per domain reload), 0.5 s heartbeat, compile/reload state, asset
+    // world-revision — answers refresh.request with AssetDatabase.Refresh(),
+    // and hands req/*.json to KitActions (invoke). Console mirroring lives in
+    // KitConsole; the stalled-main-thread detector in KitBlocked.
+    // Deliberately SMALL: a status file out, a handful of verbs in, no scene
+    // serializers, no property-by-path — write an editor script and invoke it.
     [InitializeOnLoad]
     public static class KanaboEpoch
     {
@@ -27,6 +26,11 @@ namespace UnityAgentKit.Doctor
         static readonly string RequestPath = Path.Combine(Dir, "refresh.request");
 
         static readonly int Epoch;
+        internal static int CurrentEpoch => Epoch;
+        internal static string CurrentSession => SessionState.GetString("uak.sessionId", "");
+        internal static int CurrentPid => Pid;
+        internal static int WorldRevision => SessionState.GetInt("uak.worldRevision", 0);
+        internal static string CurrentState => state;
         static readonly int Pid;
         static string state = "ready";
         static double lastWrite;
@@ -37,6 +41,7 @@ namespace UnityAgentKit.Doctor
         class Snapshot
         {
             public int schema;
+            public int protocol;
             public int pid;
             public string sessionId;
             public int epoch;
@@ -61,6 +66,13 @@ namespace UnityAgentKit.Doctor
                 SessionState.SetInt("uak.epoch", Epoch);
                 if (string.IsNullOrEmpty(SessionState.GetString("uak.sessionId", "")))
                     SessionState.SetString("uak.sessionId", Guid.NewGuid().ToString("N"));
+
+                // After the epoch is assigned, not before: KitConsole stamps
+                // every entry with CurrentEpoch, so installing it earlier would
+                // file the first logs of a reload under the previous epoch.
+                KitConsole.Install();
+                KitBlocked.Install();
+                KitRefresh.Install();
 
                 // Never claim ready before looking: initial project open runs
                 // InitializeOnLoad while the first import is still going.
@@ -88,6 +100,11 @@ namespace UnityAgentKit.Doctor
 
         static void Tick()
         {
+            // Every frame, ahead of the heartbeat throttle: the stall detector
+            // needs proof the main thread is running, not proof it wrote a file.
+            KitBlocked.MainThreadAlive();
+            KitRefresh.Tick();
+
             var now = EditorApplication.timeSinceStartup;
             if (now - lastWrite < HeartbeatSeconds) return;
 
@@ -109,6 +126,8 @@ namespace UnityAgentKit.Doctor
             }
             catch { /* a torn request is retried on the next tick */ }
 
+            KitActions.Pump();
+
             var busy = EditorApplication.isCompiling || EditorApplication.isUpdating;
             if (state != "reloading")
             {
@@ -128,6 +147,7 @@ namespace UnityAgentKit.Doctor
                 var s = new Snapshot
                 {
                     schema = 1,
+                    protocol = 2,
                     pid = Pid,
                     sessionId = SessionState.GetString("uak.sessionId", ""),
                     epoch = Epoch,

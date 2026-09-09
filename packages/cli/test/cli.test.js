@@ -1,10 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, mkdirSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { writeFileSync, mkdirSync, readdirSync, readFileSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
+import { tmp } from '../../core/test/tmp.js';
+import { epochPath, blockedPath } from '../../core/src/kanabo.js';
+import { reqDir, resDir } from '../../core/src/actions.js';
+import { consolePath } from '../../core/src/console.js';
 
 const BIN = join(dirname(fileURLToPath(import.meta.url)), '..', 'bin', 'kit.js');
 
@@ -14,7 +17,7 @@ function run(args, cwd) {
 }
 
 test('doctor --json emits parseable rows and exit 1 on failures', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'uak-'));
+  const dir = tmp('uak-');
   execFileSync('git', ['init', '-q', dir]);
   const r = run(['--json'], dir);
   const rows = JSON.parse(r.out);
@@ -24,7 +27,7 @@ test('doctor --json emits parseable rows and exit 1 on failures', () => {
 });
 
 test('doctor --json rows include a non-empty explain string (superset of human render)', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'uak-'));
+  const dir = tmp('uak-');
   execFileSync('git', ['init', '-q', dir]);
   const rows = JSON.parse(run(['--json'], dir).out);
   assert.ok(rows.length > 0);
@@ -35,7 +38,7 @@ test('doctor --json rows include a non-empty explain string (superset of human r
 });
 
 test('human output lists every check with a status glyph', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'uak-'));
+  const dir = tmp('uak-');
   execFileSync('git', ['init', '-q', dir]);
   const r = run([], dir);
   assert.match(r.out, /merge-driver/);
@@ -47,7 +50,7 @@ test('human output lists every check with a status glyph', () => {
 // a vendor call that must never run inside a unit test on a machine that has
 // the CLI installed. --only exercises the same code paths.
 test('--fix --yes repairs everything repairable, then doctor is clean of fails', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'uak-'));
+  const dir = tmp('uak-');
   execFileSync('git', ['init', '-q', dir]);
   execFileSync('git', ['-C', dir, 'config', 'user.email', 't@t.t']);
   const fix = run(['--fix', '--yes', '--only', 'hygiene'], dir);
@@ -57,7 +60,7 @@ test('--fix --yes repairs everything repairable, then doctor is clean of fails',
 });
 
 test('--undo restores pre-fix state', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'uak-'));
+  const dir = tmp('uak-');
   execFileSync('git', ['init', '-q', dir]);
   run(['--fix', '--yes', '--only', 'hygiene'], dir);
   const u = run(['--undo'], dir);
@@ -67,13 +70,13 @@ test('--undo restores pre-fix state', () => {
 });
 
 test('--fix without --yes on non-TTY exits 2', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'uak-'));
+  const dir = tmp('uak-');
   execFileSync('git', ['init', '-q', dir]);
   assert.equal(run(['--fix'], dir).code, 2);
 });
 
 test('--json rows include a boolean canApply (UPM door contract)', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'uak-'));
+  const dir = tmp('uak-');
   execFileSync('git', ['init', '-q', dir]);
   const rows = JSON.parse(run(['--json'], dir).out);
   for (const r of rows) assert.equal(typeof r.canApply, 'boolean', `${r.id} missing canApply`);
@@ -82,10 +85,10 @@ test('--json rows include a boolean canApply (UPM door contract)', () => {
 });
 
 test('human output renders ranked triage findings with clickable file:line', () => {
-  const fx = mkdtempSync(join(tmpdir(), 'uak-fx-'));
+  const fx = tmp('uak-fx-');
   const entry = { type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'x', name: 'Bash', input: { command: 'git clean -fdx' } }], usage: { input_tokens: 1, output_tokens: 1 } } };
   writeFileSync(join(fx, 's.jsonl'), JSON.stringify(entry) + '\n');
-  const dir = mkdtempSync(join(tmpdir(), 'uak-'));
+  const dir = tmp('uak-');
   execFileSync('git', ['init', '-q', dir]);
   const r = (() => {
     try { return { code: 0, out: execFileSync(process.execPath, [BIN, dir, '--only', 'audit'], { encoding: 'utf8', env: { ...process.env, UAK_TRANSCRIPTS: fx } }) }; }
@@ -99,7 +102,7 @@ test('human output renders ranked triage findings with clickable file:line', () 
 });
 
 test('a warn from a failed recorded proof is repairable via --fix (not stuck)', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'uak-'));
+  const dir = tmp('uak-');
   execFileSync('git', ['init', '-q', dir]);
   writeFileSync(join(dir, '.gitattributes'), '*.unity merge=unityyamlmerge\n');
   execFileSync('git', ['-C', dir, 'config', 'merge.unityyamlmerge.driver', "sh 'C:/x/unity-yaml-merge.sh' %O %A %B %P"]);
@@ -113,7 +116,7 @@ test('a warn from a failed recorded proof is repairable via --fix (not stuck)', 
 });
 
 test('--epoch is a machine-readable report: absent editor and live file both exit 0', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'uak-'));
+  const dir = tmp('uak-');
   execFileSync('git', ['init', '-q', dir]);
   const absent = run(['--epoch'], dir);
   assert.equal(absent.code, 0, absent.out);
@@ -131,7 +134,7 @@ test('--epoch is a machine-readable report: absent editor and live file both exi
 });
 
 test('--wait-ready: ok on a fresh ready signal, no-editor exit 1 when absent', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'uak-'));
+  const dir = tmp('uak-');
   execFileSync('git', ['init', '-q', dir]);
   const miss = run(['--wait-ready', '--timeout-ms', '400', dir], dir);
   assert.equal(miss.code, 1);
@@ -149,7 +152,7 @@ test('--wait-ready: ok on a fresh ready signal, no-editor exit 1 when absent', (
 // wait became a permanent hot poll loop. The exec timeout below is load-bearing:
 // it is what stops a regression from hanging the whole suite instead of failing.
 test('--wait-ready: a non-numeric option value exits 2 instead of waiting forever', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'uak-'));
+  const dir = tmp('uak-');
   execFileSync('git', ['init', '-q', dir]);
   const r = (() => {
     try { return { code: 0, out: execFileSync(process.execPath, [BIN, '--wait-ready', '--timeout-ms', dir], { cwd: dir, encoding: 'utf8', timeout: 5000 }) }; }
@@ -157,4 +160,103 @@ test('--wait-ready: a non-numeric option value exits 2 instead of waiting foreve
   })();
   assert.equal(r.code, 2, r.out);
   assert.match(r.out, /--timeout-ms/);
+});
+
+function freshEditor(dir) {
+  mkdirSync(join(dir, 'Temp', 'unity-agent-kit'), { recursive: true });
+  writeFileSync(epochPath(dir), JSON.stringify({ schema: 1, pid: 1, sessionId: 'x', epoch: 9, heartbeatMs: Date.now(), state: 'ready', worldRevision: 0 }));
+}
+
+test('invoke: usage error without --menu/--method (exit 2), no request written', () => {
+  const dir = tmp('uak-');
+  const r = run(['invoke', dir], dir);
+  assert.equal(r.code, 2);
+  assert.match(r.out, /--menu .* or --method/);
+  assert.equal(existsSync(reqDir(dir)), false, 'no request written on a usage error');
+});
+
+test('invoke: no editor exits 3 and removes unclaimed work without claiming legacy cancellation certainty', () => {
+  const dir = tmp('uak-');
+  const r = run(['invoke', dir, '--menu', 'Tools/Foo', '--timeout-ms', '150', '--json'], dir);
+  assert.equal(r.code, 3);
+  const j = JSON.parse(r.out);
+  assert.equal(j.reason, 'no-editor');
+  assert.deepEqual(readdirSync(reqDir(dir)), []);
+  assert.equal(j.cancellation.removedFromQueue, true);
+  assert.equal(j.cancellation.cancelled, false);
+  assert.match(j.cancellation.reason, /uncertain/);
+});
+
+// The fake editor has to be its own PROCESS, not a setInterval in this one:
+// run() is execFileSync, which blocks this thread until the CLI child exits,
+// so an in-process timer could never fire while the CLI is polling.
+const FAKE_EDITOR = `
+const { readdirSync, readFileSync, writeFileSync, mkdirSync } = require('node:fs');
+const { join } = require('node:path');
+const [req, res] = process.argv.slice(1);
+const t = setInterval(() => {
+  let files = [];
+  try { files = readdirSync(req).filter(f => f.endsWith('.json')); } catch { return; }
+  if (!files.length) return;
+  const r = JSON.parse(readFileSync(join(req, files[0]), 'utf8'));
+  mkdirSync(res, { recursive: true });
+  writeFileSync(join(res, r.id + '.json'), JSON.stringify({ id: r.id, ok: true, log: [{ type: 'Log', message: 'ran' }], startedEpoch: 9, finishedEpoch: 9 }));
+  clearInterval(t);
+}, 25);
+setTimeout(() => clearInterval(t), 15000).unref();
+`;
+
+test('invoke --method: request carries method + args; a fake editor answer yields exit 0 and the log', () => {
+  const dir = tmp('uak-'); freshEditor(dir);
+  const editor = spawn(process.execPath, ['-e', FAKE_EDITOR, reqDir(dir), resDir(dir)], { stdio: 'ignore' });
+  try {
+    const r = run(['invoke', dir, '--method', 'Ns.Type.Run', '--arg', '1', '--arg', 'two', '--timeout-ms', '10000', '--json'], dir);
+    assert.equal(r.code, 0, r.out);
+    assert.equal(JSON.parse(r.out).result.log[0].message, 'ran');
+    // the request the CLI actually wrote (the fake editor leaves it in place)
+    const req = JSON.parse(readFileSync(join(reqDir(dir), readdirSync(reqDir(dir))[0]), 'utf8'));
+    assert.equal(req.method, 'Ns.Type.Run'); assert.deepEqual(req.args, ['1', 'two']);
+  } finally { editor.kill(); }
+});
+
+test('invoke: blocked editor → exit 1 with the modal title in the JSON', () => {
+  const dir = tmp('uak-'); freshEditor(dir);
+  writeFileSync(blockedPath(dir), JSON.stringify({ kind: 'modal', title: 'API Update Required', sinceMs: Date.now() - 4000, threadHeartbeatMs: Date.now(), mainStalledMs: 4000 }));
+  const r = run(['invoke', dir, '--menu', 'X', '--timeout-ms', '500', '--json'], dir);
+  assert.equal(r.code, 1);
+  const j = JSON.parse(r.out);
+  assert.equal(j.reason, 'blocked'); assert.equal(j.snap.blocked.title, 'API Update Required');
+});
+
+test('console: reads, filters, clears', () => {
+  const dir = tmp('uak-');
+  mkdirSync(join(dir, 'Temp', 'unity-agent-kit'), { recursive: true });
+  writeFileSync(consolePath(dir), [
+    { epoch: 3, frame: 1, timeMs: 1, type: 'Log', message: 'hello', stack: '' },
+    { epoch: 4, frame: 2, timeMs: 2, type: 'Error', message: 'boom', stack: 'at A.B()' },
+  ].map(x => JSON.stringify(x)).join('\n') + '\n');
+  let r = run(['console', dir], dir);
+  assert.equal(r.code, 0); assert.match(r.out, /\[Log\] e3 f1 hello/); assert.match(r.out, /\[Error\] e4 f2 boom\n\s+at A\.B\(\)/);
+  r = run(['console', dir, '--errors', '--json'], dir);
+  assert.deepEqual(JSON.parse(r.out).map(x => x.message), ['boom']);
+  r = run(['console', dir, '--since-epoch', '4', '--last', '1', '--json'], dir);
+  assert.equal(JSON.parse(r.out).length, 1);
+  r = run(['console', dir, '--clear'], dir);
+  assert.match(r.out, /console cleared/);
+  assert.equal(readFileSync(consolePath(dir), 'utf8'), '');
+});
+
+test('large console and bridge operation JSON flush completely before the CLI exits', () => {
+  const dir = tmp('uak-output-');
+  mkdirSync(resDir(dir), { recursive: true });
+  const message = 'large-output-'.repeat(32768) + 'complete-tail';
+  const entry = { epoch: 1, type: 'Log', message };
+  writeFileSync(consolePath(dir), JSON.stringify(entry) + '\n');
+  writeFileSync(join(resDir(dir), 'large.json'), JSON.stringify({ id: 'large', ok: true, state: 'completed', log: [entry] }));
+  for (const args of [['console', dir, '--json'], ['op', 'status', dir, '--id', 'large']]) {
+    const result = run(args, dir);
+    assert.equal(result.code, 0);
+    const json = JSON.parse(result.out);
+    assert.equal(Array.isArray(json) ? json[0].message : json.operation.log[0].message, message);
+  }
 });

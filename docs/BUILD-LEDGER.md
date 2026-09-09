@@ -278,3 +278,83 @@ Four live runs, all self-reported by the harness (meta.spendUsd): cmd1 iteration
 
 # Skill distribution (2026-08-13, post-wave)
 Plugin marketplace added at .claude-plugin/marketplace.json (5f49f94): skills now install and update straight from GitHub — `claude plugin marketplace add ryansoohoo/unity-agent-kit` + `claude plugin install unity-agent-kit`, updates via `claude plugin update unity-agent-kit`. Both manifests `claude plugin validate` clean; end-to-end proven from the public repo (clone → validate → install → enabled, user scope, v0.4.0). README Door 2 rewritten around it; --plugin-dir remains the contributor path. Kintarō dropped its five stale skill copies (d0ffe65) — it now rides the plugin, so the measured descriptions reach every project and copy-drift is structurally gone.
+
+# v0.5.0 — editor actions Plan A (2026-08-15+)
+
+Spec: `docs/superpowers/specs/2026-08-15-editor-actions-v3-design.md` (binding).
+Plan: `docs/superpowers/plans/2026-08-15-editor-actions-a-invoke-console-blocked.md`.
+Worktree `.claude/worktrees/editor-actions-a`, branch `editor-actions-a`, base `37eb46a` (baseline 127/127).
+Ships three things an agent could not do before: run editor code without a human click (`kit invoke`), read the console as structured data (`kit console`), and get told WHY a wedged editor is wedged (`blocked`).
+
+## Per-task commits
+
+| Task | Commit | What |
+|---|---|---|
+| 1 | `0c10a88` | feat(core): editor-actions request/result channel (CLI side) |
+| 2 | `ced44ff` | feat(core): structured console read from Temp/unity-agent-kit/console.jsonl |
+| 3 | `220d442` | feat(core): blocked.json merged into the epoch snapshot; wait-ready reports reason blocked |
+| 1-3 fix | `3781a30` | fix(core): awaitResult reports blocked before the freshness gate |
+| 4 | `6ae2af6` | feat(cli): kit invoke / kit console verbs over the file channel |
+| 5 | `2d6cff5` | feat(upm): KitActions — invoke menu items / static methods over the file channel |
+| 6 | `cc72c65` | feat(upm): KitConsole — console mirrored to Temp/unity-agent-kit/console.jsonl |
+| 7 | `5b6af6b` | feat(upm): KitBlocked — names the modal that stalled the editor; wait-ready says why |
+| 5-7 fix 1 | `28de044`, `f2d9914` | KitBlocked names the modal via enabled/disabled window enumeration; readConsole tolerates a UTF-8 BOM |
+| 5-7 fix 2 | `e47cb8a`, `f5db333` | serialize the stall probe + drop the file when the main thread resumed under it; only a modal aborts a wait |
+| 8 | `0d8b861` | feat(doctor): pipeline informational check; kanabo check surfaces a blocked editor |
+| 9 | `0a10636` | skills: agents run editor tools and read the console themselves; blocked diagnosis; Logs/Editor.log |
+| 10 | this commit | release: v0.5.0 — version bump, README verbs + doctor rows, skills polish, this ledger |
+
+## Live proofs — Kintarō, Unity 6000.5.5f1, editor PID 24116, session `53689e8d…`
+
+Real editor, real domain reloads: epoch went **1 → 11 over the whole task-5–7 session** (1 → 6 at the first proof pass, the rest during the fix rounds). Kintarō's `Packages/manifest.json` was retargeted to this worktree's `upm/` for the duration (per the preflight ruling) and must be restored to `file:../../unity-agent-kit/upm` before merge. Nothing was ever staged or committed in Kintarō; only its `Temp/` was touched.
+
+- **`kit invoke --menu`**: **1/1** ok — `Kintarō/Build Sandbox (scene + prefabs)` ran, exit 0, and the result carried the builder's own `[Log]` line back to the CLI.
+- **Bad menu path**: `--menu "Nope/Nothing"` → `invoke FAILED: no such menu item`, exit 1, with Unity's own error in `log[]`. Failing for the right reason, not by timeout.
+- **`kit invoke --method`**: `UnityEditor.EditorApplication.Beep` looped **20/20 exit-0**. Reflection binding by name + arity worked first try, including `Convert.ChangeType` of a string arg to `int`.
+- **Console line seen: YES** — `kit console --errors --last 3` returned exactly `[Error] e4 f75 uak-console-proof` plus its first stack line, from an error raised through `kit invoke --method UnityEngine.Debug.LogError`.
+- **Console survives a domain reload: YES** — the epoch-4 entry was still readable at epoch 5 after a real recompile-triggered reload. Append-only file, confirmed by reading it across the boundary.
+- **Blocked title captured: NO.** No modal title string was ever captured live, because the user rule (2026-08-15) forbids opening dialogs, file panels, or any UI on this machine. Every stall proof was a `System.Threading.Thread.Sleep`, which the detector correctly classifies as `kind: "main-thread-stalled"` with `title: ""` — not `modal`. The modal branch is verified only by a PowerShell window-state probe (with a dialog up: modal window `enabled=True`, main window `enabled=False`), which is exactly what the C# heuristic keys on. Stated plainly: **the modal-title path is not live-proven.**
+- **Stall detection timings (after fix round 2)**: `blocked.json` appears **2340 ms** into a 6 s stall, refreshes on its 500 ms period, and is **gone 108 ms** after the last probe write — no orphan file, no false `blocked` surviving the resume. `--epoch` during the stall names it (`mainStalledMs: 3873`); `--epoch` after it shows `blocked: null`.
+- **Requests are never lost**: in every stall proof the request was consumed before the stall, `req/` ended empty, and the result file landed with `ok: true`. The CLI's exit 1 is a diagnosis, not a dropped request.
+- **Trigger evals were NOT re-run.** No `description:` frontmatter line changed in any skill, so the pinned trigger-eval numbers from the 2026-08-13 wave (overall 234/300, 78.0%) still describe the shipped descriptions. Bodies changed; descriptions did not.
+
+## Rulings — where the shipped code deviates from the spec or the plan
+
+1. **`awaitResult` reports `blocked` before the freshness gate.** The plan's Task 1 code checked freshness first, so a blocked editor — whose main-thread heartbeat is stale *by construction* — reported `no-editor` instead of `blocked`. Spec §3 requires `blocked`; the plan was wrong and was amended.
+2. **`KitConsole` writes UTF-8 *without* a BOM.** The brief said `Encoding.UTF8`, which emits a BOM on file creation; `readConsole` splits on `\n` and `JSON.parse`s each line, so the leading `U+FEFF` made the first entry of every fresh `Temp/` permanently unparseable. Caught by a live proof, not by review. Fixed on both sides: the writer emits `new UTF8Encoding(false)`, and the reader strips a leading `U+FEFF` anyway.
+3. **Only `kind: "modal"` aborts a wait.** The editor still writes `blocked.json` for *every* main-thread stall, but `waitReady` and `awaitResult` abort only for a modal (`isWaitAborting(snap)` in `kanabo.js`). A long synchronous import is a legitimate slow operation, not a dead end — it stays visible on `--epoch` and the wait runs to its deadline. Same rule in the `kanabo` doctor row: modal → `warn` naming the dialog, other stalls → `pass`. Cost if the classifier is ever wrong about a real modal: it degrades to `timeout`, i.e. pre-v3 behaviour.
+4. **The modal-title path is not live-proven** — see the proofs section. A deliberate gap, forced by the no-UI rule, and the one place where shipped behaviour rests on a window-state probe rather than an end-to-end run.
+5. **`EditorUtility.DisplayDialog` auto-returns `True` in an unfocused editor**, so it cannot raise a blocking modal for a headless proof anyway. The plan's original modal proof was unrunnable as written even before the no-UI rule landed.
+6. **Modal detection is by window enumeration, not foreground.** The first implementation used the foreground window / `Process.MainWindowTitle`, which reports `""` whenever the editor sits unfocused behind the agent's terminal — i.e. in the normal agent case. Replaced with a two-pass enumeration of this process's visible top-level windows (a disabled window present + another enabled titled window → modal). Two passes because `GetWindowText` on our own window sends `WM_GETTEXT` and blocks on the very main thread that is stalled; pass 2 runs only once a disabled window has proven a modal is up, and a modal pumps its own message loop.
+
+## Final-review fix wave (post-tag, 2026-08-15)
+
+Whole-branch review by the most capable model. Findings, all RESOLVED in this wave — none deferred:
+
+- **RESOLVED — request TTL.** `KitActions.Pump` ran any `req/*.json` regardless of age, so a request that timed out and was retried by the caller could double-fire when a later editor found the original. `Request` now carries `requestedMs` and anything older than `RequestTtlMs` (10 min) is answered `ok: false, "request expired (age N s) — not executed"` instead of dispatched. The CLI's timeout/no-editor line says so.
+- **RESOLVED — in-flight invoke across a domain reload.** The request id is stashed in `SessionState` (`uak.inflight`) before dispatch and erased after `Write`; the first `Pump` on a new domain turns any leftover into `"interrupted by domain reload at epoch N"`. Spec §3's reload-survival contract, previously honoured for the epoch signal but not for a dispatch caught mid-flight — the CLI used to wait out its whole timeout for an answer that could never arrive.
+- **RESOLVED — `Time.frameCount` off the main thread.** `KitConsole.OnLog` runs on the logging thread and read a main-thread-only API. The counter is now sampled once per `EditorApplication.update` into a static `lastFrame` and read as a plain int off-thread.
+- **RESOLVED — the two deferred minors above**: `ERROR_TYPES` is exported from `console.js` and used by `kit.js` (one definition, not two), and `invoke FAILED:` falls back to `no error reported` instead of printing `undefined`.
+- **RESOLVED — exit-code docs**: both READMEs now list `2 = usage error`.
+
+## Tests
+
+`npm test` — **151/151 pass, green twice** (36.8 s and 38.5 s), including `check:fresh` for both generated bundles. Baseline at `37eb46a` was 127; +24 across Tasks 1–8.
+
+Honest note on the merge-driver pair: `packages/core/test/merge-driver.test.js` failed 2/4 in the Task 8 and Task 9 *subagent* shells and passed 4/4 in the controller's shell, repeatedly. Re-confirmed here at release: `node --test packages/core/test/merge-driver.test.js` → **4/4 pass**, and both full-suite runs → 151/151 with no merge-driver failure. The difference is environmental (subagent shell environment vs the real `UnityYAMLMerge` proof), not a code defect — recorded rather than waved off, because the same suite genuinely reports differently depending on which shell runs it.
+
+## Follow-ups
+
+Next waves:
+- **Plan B — `kit test`**: run EditMode/PlayMode tests over the same file channel.
+- **Plan C — `kit play`**: enter/exit play mode; also carries the deferred spec items `busy` + `progress.json` (play-only) and the `input-shim` doctor check.
+
+Deferred minors, none blocking:
+- `res/<id>.json` is never reaped — every invoke leaves a result file behind. Harmless today because `Temp/` is disposable and Unity clears it, but the directory grows unbounded within a session. Reap on Plan B.
+- `--method` overload resolution is name + arity only and does not use `FlattenHierarchy` — document the sharp edge (a wrong overload surfaces as a readable `Convert.ChangeType` error in `res.error`).
+- No `EditorApplication.quitting` hook to delete `blocked.json` on editor exit; a stale file is benign today only because of the reader's 3 s freshness gate.
+- `SMTO_ABORTIFHUNG` is not bound on the pass-2 `GetWindowText`; if a "modal" ever fails to pump, the probe blocks and `blocked.json` arrives late rather than never.
+- `kind` is a bare-string contract across the JS↔C# boundary (`JsonUtility` writes it, JS compares `=== 'modal'`). A typo on the C# side is a silent behaviour change, not a compile error.
+- `unityStatus` in the `pipeline` check maps every non-`ENOENT` error to `''` ("no reachable editor"), so a genuinely broken CLI is reported as an unreachable editor.
+- Trigger evals not re-run (descriptions unchanged) — re-run only when a `description:` line moves.
+- The merge-driver shell discrepancy above deserves a root-cause pass of its own.

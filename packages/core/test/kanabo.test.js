@@ -1,11 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { epochPath, requestPath, readEpoch, isFresh, requestRefresh, waitReady } from '../src/kanabo.js';
+import { epochPath, requestPath, blockedPath, readEpoch, isFresh, requestRefresh, waitReady } from '../src/kanabo.js';
+import { tmp } from './tmp.js';
 
-const proj = () => mkdtempSync(join(tmpdir(), 'uak-kb-'));
+const proj = () => tmp('uak-kb-');
 
 function writeSnap(root, snap) {
   mkdirSync(join(root, 'Temp', 'unity-agent-kit'), { recursive: true });
@@ -84,4 +84,46 @@ test('waitReady: stale heartbeat with a live file → timeout reason says an edi
   const r = await waitReady(p, { timeoutMs: 300, pollMs: 40 });
   assert.equal(r.ok, false);
   assert.equal(r.reason, 'no-editor'); // stale-only is indistinguishable from closed — honest label
+});
+
+function writeBlocked(root, b) {
+  mkdirSync(join(root, 'Temp', 'unity-agent-kit'), { recursive: true });
+  writeFileSync(blockedPath(root), JSON.stringify(b));
+}
+const blockedNow = (extra = {}) => ({ kind: 'modal', title: 'API Update Required', sinceMs: Date.now() - 4000, threadHeartbeatMs: Date.now(), mainStalledMs: 4000, ...extra });
+
+test('readEpoch merges a fresh blocked.json as snap.blocked; stale or absent → null', () => {
+  const p = proj();
+  writeSnap(p, ready(2));
+  assert.equal(readEpoch(p).blocked, null);
+  writeBlocked(p, blockedNow());
+  assert.equal(readEpoch(p).blocked.title, 'API Update Required');
+  writeBlocked(p, blockedNow({ threadHeartbeatMs: Date.now() - 10000 }));
+  assert.equal(readEpoch(p).blocked, null);
+  writeFileSync(blockedPath(p), '{torn');
+  assert.equal(readEpoch(p).blocked, null);
+});
+
+test('waitReady: returns reason blocked immediately when the main thread is stalled behind a modal', async () => {
+  const p = proj();
+  writeSnap(p, { ...ready(2), heartbeatMs: Date.now() - 6000 }); // main thread stale
+  writeBlocked(p, blockedNow());
+  const r = await waitReady(p, { timeoutMs: 2000, pollMs: 20 });
+  assert.equal(r.ok, false);
+  assert.equal(r.reason, 'blocked');
+  assert.equal(r.snap.blocked.kind, 'modal');
+  assert.ok(r.waitedMs < 1000);
+});
+
+// A long synchronous import stalls the main thread for well over StallMs. It
+// needs no human and it ends on its own, so it must NOT abort the wait — but
+// it stays visible on the snapshot.
+test('waitReady: a non-modal stall is waited out, not treated as blocked', async () => {
+  const p = proj();
+  writeSnap(p, { ...ready(2), heartbeatMs: Date.now() - 6000 });
+  writeBlocked(p, blockedNow({ kind: 'main-thread-stalled', title: '' }));
+  const r = await waitReady(p, { timeoutMs: 200, pollMs: 20 });
+  assert.equal(r.reason, 'timeout');
+  assert.ok(r.waitedMs >= 200);
+  assert.equal(r.snap.blocked.kind, 'main-thread-stalled');
 });

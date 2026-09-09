@@ -1,16 +1,16 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createContext } from '../src/context.js';
 import '../src/checks/index.js';
 import { getCheck } from '../src/registry.js';
+import { tmp } from './tmp.js';
 
 const kanabo = getCheck('kanabo');
 
 function withSnap(snap) {
-  const dir = mkdtempSync(join(tmpdir(), 'uak-kbc-'));
+  const dir = tmp('uak-kbc-');
   if (snap) {
     mkdirSync(join(dir, 'Temp', 'unity-agent-kit'), { recursive: true });
     writeFileSync(join(dir, 'Temp', 'unity-agent-kit', 'epoch.json'), JSON.stringify(snap));
@@ -40,6 +40,28 @@ test('kanabo: pass with state named while compiling (transient is not a defect)'
   const r = await kanabo.detect(withSnap({ schema: 1, pid: 5, sessionId: 's', epoch: 12, heartbeatMs: Date.now(), state: 'compiling', worldRevision: 40, probePresent: false, probeValue: -1 }));
   assert.equal(r.status, 'pass');
   assert.match(r.evidence, /compiling/);
+});
+
+// A blocked editor writes blocked.json from a background thread while the
+// main-thread heartbeat in epoch.json goes stale — that is the whole shape.
+function withBlocked(blocked) {
+  const dir = tmp('uak-kbc-');
+  mkdirSync(join(dir, 'Temp', 'unity-agent-kit'), { recursive: true });
+  writeFileSync(join(dir, 'Temp', 'unity-agent-kit', 'epoch.json'), JSON.stringify({ schema: 1, pid: 5, sessionId: 's', epoch: 12, heartbeatMs: Date.now() - 6000, state: 'ready', worldRevision: 40, probePresent: false, probeValue: -1 }));
+  writeFileSync(join(dir, 'Temp', 'unity-agent-kit', 'blocked.json'), JSON.stringify({ threadHeartbeatMs: Date.now(), ...blocked }));
+  return createContext(dir);
+}
+
+test('kanabo: warn naming the modal when one blocks the editor', async () => {
+  const r = await kanabo.detect(withBlocked({ kind: 'modal', title: 'Import Unity Package', sinceMs: 4000, mainStalledMs: 4000 }));
+  assert.equal(r.status, 'warn');
+  assert.match(r.evidence, /Import Unity Package/);
+});
+
+test('kanabo: pass when the main thread is stalled without a modal (import in progress)', async () => {
+  const r = await kanabo.detect(withBlocked({ kind: 'main-thread-stalled', title: '', sinceMs: 7000, mainStalledMs: 7000 }));
+  assert.equal(r.status, 'pass');
+  assert.match(r.evidence, /stalled/);
 });
 
 test('kanabo: na when the heartbeat is stale (editor closed)', async () => {

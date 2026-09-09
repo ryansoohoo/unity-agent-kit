@@ -1,7 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, existsSync, readdirSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { existsSync, readdirSync } from 'node:fs';
 import { join, isAbsolute } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createContext } from '../src/context.js';
@@ -9,9 +8,10 @@ import '../src/checks/index.js';
 import { getCheck } from '../src/registry.js';
 import { doctor, applyOne } from '../src/engine.js';
 import { undoAll } from '../src/audit.js';
+import { tmp } from './tmp.js';
 
 function tmpRepo() {
-  const dir = mkdtempSync(join(tmpdir(), 'uak-'));
+  const dir = tmp('uak-');
   execFileSync('git', ['init', '-q', dir]);
   return dir;
 }

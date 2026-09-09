@@ -1,0 +1,17 @@
+{
+  "name": "@unity-agent-kit/mcp",
+  "version": "0.6.0",
+  "description": "Local STDIO MCP tools for the Unity agent kit bridge",
+  "type": "module",
+  "bin": { "unity-agent-kit-mcp": "./bin/server.js" },
+  "scripts": { "test": "node --test test/integration.test.js" },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@unity-agent-kit/core": "0.6.0",
+    "zod": "^4.5.4"
+  },
+  "files": ["bin", "src", "README.md"],
+  "engines": { "node": ">=20" },
+  "repository": { "type": "git", "url": "git+https://github.com/ryansoohoo/unity-agent-kit.git", "directory": "packages/mcp" },
+  "license": "MIT"
+}

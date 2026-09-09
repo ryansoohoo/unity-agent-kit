@@ -1,11 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import '../src/checks/index.js';
 import { getCheck } from '../src/registry.js';
 import { _deps } from '../src/checks/orphans.js';
+import { tmp } from './tmp.js';
 
 const orphans = getCheck('orphans');
 const fakeCtx = (root) => ({ root, platform: 'win32', git: () => ({ ok: false, out: '', code: 1 }) });
@@ -24,7 +24,7 @@ test('orphans: na off-Windows and when tasklist is unavailable', async () => {
 });
 
 test('orphans: clean process table and no locks = pass', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'uak-or-'));
+  const root = tmp('uak-or-');
   await withProcs([{ name: 'Unity.exe', pid: 100 }, { name: 'dotnet.exe', pid: 200 }], async () => {
     const r = await orphans.detect(fakeCtx(root));
     assert.equal(r.status, 'pass');
@@ -33,7 +33,7 @@ test('orphans: clean process table and no locks = pass', async () => {
 });
 
 test('orphans: multiple Unity processes warn with PIDs', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'uak-or-'));
+  const root = tmp('uak-or-');
   await withProcs([{ name: 'Unity.exe', pid: 100 }, { name: 'Unity.exe', pid: 101 }], async () => {
     const r = await orphans.detect(fakeCtx(root));
     assert.equal(r.status, 'warn');
@@ -42,7 +42,7 @@ test('orphans: multiple Unity processes warn with PIDs', async () => {
 });
 
 test('orphans: UnityLockfile with no Unity running = stale lock warn', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'uak-or-'));
+  const root = tmp('uak-or-');
   mkdirSync(join(root, 'Temp'), { recursive: true });
   writeFileSync(join(root, 'Temp', 'UnityLockfile'), '');
   await withProcs([], async () => {
@@ -53,7 +53,7 @@ test('orphans: UnityLockfile with no Unity running = stale lock warn', async () 
 });
 
 test('orphans: locked git worktree admin dirs are reported', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'uak-or-'));
+  const root = tmp('uak-or-');
   mkdirSync(join(root, '.git', 'worktrees', 'wt-a'), { recursive: true });
   writeFileSync(join(root, '.git', 'worktrees', 'wt-a', 'locked'), 'dead session');
   await withProcs([{ name: 'Unity.exe', pid: 1 }], async () => {
@@ -64,8 +64,8 @@ test('orphans: locked git worktree admin dirs are reported', async () => {
 });
 
 test('orphans: stale locks are scanned across every worktree root', async () => {
-  const rootA = mkdtempSync(join(tmpdir(), 'uak-or-'));
-  const rootB = mkdtempSync(join(tmpdir(), 'uak-or-'));
+  const rootA = tmp('uak-or-');
+  const rootB = tmp('uak-or-');
   mkdirSync(join(rootB, 'Temp'), { recursive: true });
   writeFileSync(join(rootB, 'Temp', 'UnityLockfile'), '');
   const ctx = {

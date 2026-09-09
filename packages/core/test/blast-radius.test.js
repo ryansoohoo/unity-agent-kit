@@ -1,15 +1,15 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createContext } from '../src/context.js';
 import '../src/checks/index.js';
 import { doctor, applyOne } from '../src/engine.js';
 import { DENY_RULES } from '../src/checks/blast-radius.js';
+import { tmp } from './tmp.js';
 
-function repo() { const d = mkdtempSync(join(tmpdir(), 'uak-')); execFileSync('git', ['init', '-q', d]); return d; }
+function repo() { const d = tmp('uak-'); execFileSync('git', ['init', '-q', d]); return d; }
 
 test('fail without settings; apply merges deny rules preserving existing content', async () => {
   const ctx = createContext(repo());

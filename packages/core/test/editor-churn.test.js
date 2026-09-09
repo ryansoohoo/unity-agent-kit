@@ -1,15 +1,15 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createContext } from '../src/context.js';
 import '../src/checks/index.js';
 import { doctor } from '../src/engine.js';
+import { tmp } from './tmp.js';
 
 function repoWith(files) {
-  const d = mkdtempSync(join(tmpdir(), 'uak-'));
+  const d = tmp('uak-');
   execFileSync('git', ['init', '-q', d]);
   execFileSync('git', ['-C', d, 'config', 'user.email', 't@t.t']);
   execFileSync('git', ['-C', d, 'config', 'user.name', 't']);
@@ -45,7 +45,7 @@ test('churn-only: warns on unstaged ProjectSettings churn alone', async () => {
 });
 
 test('na on non-git directory', async () => {
-  const d = mkdtempSync(join(tmpdir(), 'uak-'));
+  const d = tmp('uak-');
   const r = (await doctor(createContext(d), { only: 'editor-churn' }))[0];
   assert.equal(r.status, 'na');
 });

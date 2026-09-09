@@ -1,23 +1,23 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createContext } from '../src/context.js';
 import '../src/checks/index.js';
 import { getCheck } from '../src/registry.js';
+import { tmp } from './tmp.js';
 
 const audit = getCheck('audit');
 const aUse = (name, input) => ({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'x', name, input }], usage: { input_tokens: 1, output_tokens: 1 } } });
 const aResult = (text) => ({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'x', content: text }] } });
 
 function fixture(entries) {
-  const dir = mkdtempSync(join(tmpdir(), 'uak-fx-'));
+  const dir = tmp('uak-fx-');
   writeFileSync(join(dir, 's.jsonl'), entries.map(e => JSON.stringify(e)).join('\n') + '\n');
   return dir;
 }
 
-async function detectWith(entries, root = mkdtempSync(join(tmpdir(), 'uak-au-'))) {
+async function detectWith(entries, root = tmp('uak-au-')) {
   process.env.UAK_TRANSCRIPTS = fixture(entries);
   try { return await audit.detect(createContext(root)); }
   finally { delete process.env.UAK_TRANSCRIPTS; }

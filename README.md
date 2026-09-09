@@ -1,237 +1,63 @@
 # Unity Agent Kit
 
-Unity Agent Kit makes any Unity project agent-ready in one guided setup — checked git/repo
-hygiene, split workflow skills for coding agents, and a tailored `CLAUDE.md` — with the goal
-of being the best agent↔Unity workflow, one download. It wraps Unity's own official CLI and
-MCP server rather than competing with them, and everything it does is either a read-only
-check or a consented, undoable fix.
+Connect a local coding agent to Unity through MCP. Check which code the Editor loaded, run project checks and Play scenarios, and inspect CPU profiler captures without switching to the Unity window.
 
-## Support matrix
+Works with **Codex, Claude Code and Cursor**. The same bridge is available as a CLI. Unity's separate Pipeline/MCP package is optional.
 
-**Verified: Windows + Unity 6.x.** That's the only platform/version combination this kit has
-actually been run and tested against. Checks that don't apply to your machine or project
-report `na`, not a guess — you'll never see a false pass. macOS/Linux and pre-6.x Unity are
-untested; some checks will correctly report `na` there (e.g. `longpaths` and `path-headroom`
-are Windows-only concerns), others simply haven't been verified yet.
+## Get started
 
-## Quick start
+You need Git, Node.js 20 or newer, an existing Unity 6 project, and one of the supported local coding clients.
 
-### Door 1: npx CLI
-
-The published `npx unity-agent-kit` form ships with the npm release; until then, run it from
-a clone (below) — the CLI itself is fully working today, only the npm publish step is pending.
-
-```
-# From a clone of this repo (works today):
-git clone <this-repo> unity-agent-kit && cd unity-agent-kit
-npm install    # zero runtime deps — this only links the workspace packages
-node packages/cli/bin/kit.js /path/to/your/unity/project          # doctor
-node packages/cli/bin/kit.js --fix /path/to/your/unity/project     # wizard
+```sh
+git clone https://github.com/ryansoohoo/unity-agent-kit.git
+cd unity-agent-kit
+git checkout v0.6.0
+npm ci
+node scripts/setup.mjs --project "/path/to/UnityProject" --client codex
 ```
 
-Once published to npm:
+Replace the project path and choose `codex`, `claude`, `cursor`, or `all`. On Windows, a path such as `"C:/Projects/My Game"` works. Keep this clone in place: the project and MCP configuration reference it.
 
+Open the Unity project once and let the package finish importing. Open the same project in your coding client, trust or enable its `unity-agent-kit` MCP server, and start a new task. See the [client setup guide](docs/setup.md) for the exact files, connection checks and uninstall command.
+
+Try this prompt:
+
+> Use Unity Agent Kit to report the connected Editor's project, version and state. Discover the available checks before running any project code.
+
+For GPT models, use a local Codex desktop, CLI or IDE session. This setup does not connect browser ChatGPT directly to a local stdio process.
+
+## What the bridge does
+
+| Task | Evidence or control |
+| --- | --- |
+| Verify changed C# | Refresh receipts link requested file hashes to compilation, reload and loaded assemblies. A follow-up check can require that receipt. |
+| Coordinate agents | FIFO leases reserve an Editor sequence through refresh, checks, Play, profiling and cleanup. |
+| Recover from waits | Durable operation IDs distinguish queued, running and completed work. Queued operations can be cancelled. |
+| Exercise gameplay | Bounded Play sessions call your static setup, step, check and teardown methods, with optional Game-view PNG capture. |
+| Investigate CPU cost | Native captures preserve caller paths, threads, allocations and archive history. Comparisons report scenario and focus mismatches. |
+| Check project setup | The doctor inspects repository hygiene, Unity YAML merge setup, package state and agent skills. |
+
+Parallel agents can work in separate checkouts. One owner integrates their changes into the checkout the Editor actually opened, then verifies them. A lease does not merge branches or block direct filesystem writes.
+
+Background refresh and Play have been verified on Windows with Unity **6000.5.5f1**. Other Unity 6 versions and native Editor behavior on macOS/Linux have not received the same native verification. A responsive Editor does not prove compilation, and a completed Play session does not prove game behavior without a check. See [operation verification](docs/operations-verification.md).
+
+## Read more
+
+- [Setup, client configuration and removal](docs/setup.md)
+- [Editor operations, receipts and Play callbacks](docs/operations.md)
+- [Profiler capture, comparisons and limits](docs/profiler.md)
+- [Profiler verification evidence](docs/profiler-verification.md)
+- [Release notes](CHANGELOG.md)
+
+Play sessions restore scene setup, time scale and their temporary background setting. Your callbacks own their other effects. The profiler measures recorded CPU samples; it does not provide memory object snapshots, GPU hardware analysis or automatic game-input injection.
+
+## Develop the kit
+
+```sh
+npm ci
+npm run build:plugin
+npm run build:upm
+npm test
 ```
-npx unity-agent-kit
-```
 
-Runs the doctor: read-only, safe to run on any tree. It never changes anything by itself.
-
-```
-npx unity-agent-kit --fix
-```
-
-Runs the per-step consent wizard: walks each failing check, shows you the evidence and the
-one-line why, and asks `Apply? [y/N/a/q]` before touching anything.
-
-Other flags (same for both forms above):
-- `--yes` — apply without prompting (for CI; still per-check, just non-interactive)
-- `--only <layer|id>` — scope to one layer (e.g. `hygiene`) or one check id (e.g. `merge-driver`)
-- `--undo` — reverse everything the kit has applied in this project (files and
-  config are restored exactly; the kit's own `.unity-agent-kit/` audit folder
-  remains as a record)
-- `--json` — machine-readable output: a bare top-level JSON **array** of check
-  rows (`[{id, layer, title, status, evidence, explain, canApply, detail?}, …]`)
-- `--epoch` — print the v2 reload-boundary signal as JSON and exit 0 (see the Kanabō section)
-- `--wait-ready [--since-epoch N] [--timeout-ms M] [--poll-ms P]` — block (bounded!) until the editor signal is fresh+ready; exit 0 on ready, 1 with a JSON reason otherwise
-
-Exit code is `1` if and only if at least one check is failing; `0` otherwise.
-
-### Door 2: Claude Code plugin
-
-Install the five skills below straight from GitHub — no clone needed:
-
-```
-claude plugin marketplace add ryansoohoo/unity-agent-kit
-claude plugin install unity-agent-kit
-```
-
-(inside a session: `/plugin marketplace add ryansoohoo/unity-agent-kit`, then
-`/plugin install unity-agent-kit`). Updating later is one command — it pulls from
-this repo:
-
-```
-claude plugin update unity-agent-kit@unity-agent-kit
-```
-
-(the `plugin@marketplace` form — the bare name works for install but not update.)
-From a clone, `claude --plugin-dir ./plugin` still works as the contributor path.
-The plugin ships the skills only; the doctor/wizard still comes from the CLI door above.
-
-### Door 3: Unity editor window (UPM)
-
-Adds `Window > Unity Agent Kit` — the same checks, applied per-click with
-consent, no terminal touched. The package bundles the whole Node core under
-`Core~/` (one code path; the C# side contains zero check logic).
-
-**Requires Node ≥ 20 on PATH.** Decision (v1.1): the package does NOT bundle a
-Node runtime — that keeps the repo binary-free and the core zero-dependency.
-If Node is missing, the window says exactly that and links the installer;
-install Node, restart Unity (it reads PATH at launch), and run again.
-
-Install from a local clone — add to `Packages/manifest.json` (note: `file:`
-paths resolve relative to your project's `Packages/` folder, not the project
-root):
-
-    "com.unity-agent-kit.doctor": "file:../../path-to/unity-agent-kit/upm"
-
-or straight from git:
-
-    "com.unity-agent-kit.doctor": "https://github.com/ryansoohoo/unity-agent-kit.git?path=/upm"
-
-Deep bundle paths ride along (`Core~/node_modules/...`) — if your project sits near the MAX_PATH cliff, the kit's own `longpaths`/`path-headroom` checks are the fix.
-
-Fixes applied from the window are recorded to `.unity-agent-kit/applied.json`
-like any other door; undoing them currently needs the CLI door (`--undo`) —
-the window has no undo button yet.
-
-Headless proof (CI or dogfood):
-
-    Unity.exe -batchmode -nographics -projectPath <proj> -executeMethod UnityAgentKit.Doctor.KitDoctorBatchProof.Run -logFile proof.log
-
-## What the doctor checks
-
-Twelve checks, each with `detect` (read-only) and `explain` (why it matters). Five of them —
-`merge-driver`, `longpaths`, `worktree-ignore`, `blast-radius`, `unity-mcp` — also have
-`apply` (consented, undoable). `merge-driver` additionally has `verify`: a 5-case regression
-suite that proves the fix, not just a re-check of the same detect logic.
-
-| id | why |
-|---|---|
-| `merge-driver` | Routes Unity YAML (scenes, prefabs, `.meta`, materials) to a tested merge driver instead of git's default text merge, which can write conflict markers into a `guid:` line — Unity treats that as a corrupt `.meta` and may regenerate the GUID, silently repointing every reference. Proven by a 5-case regression suite, not just "config looks right." |
-| `longpaths` | Enables `core.longpaths` so Windows' 260-character `MAX_PATH` doesn't break git operations on Unity's deeply nested `Library/PackageCache` paths. |
-| `worktree-ignore` | Gitignores `.claude/worktrees/` so `git clean -xdf` — the most commonly recommended fix for a corrupt `Library/` — can't delete an agent's uncommitted work along with it. |
-| `unity-version` | Reports your Unity version against the verified support matrix (Windows + Unity 6.x) — honesty about what's actually been tested, not a compatibility promise. |
-| `path-headroom` | Measures how much `MAX_PATH` headroom is left once a worktree prefix is added on top of Unity's already-deep `Library/` paths, so imports don't fail with confusing native errors. |
-| `editor-churn` | Warns on uncommitted scene files and editor reserialization churn (`ProjectSettings/`, `Assets/Settings/`) before an agent session starts — the kit never commits for you. |
-| `blast-radius` | Installs destructive-command deny rules (`git clean`, `git reset --hard`, `rm -rf`, etc.) into `.claude/settings.json` so the commands that can nuke `.meta` files or `Library/` require explicit human approval. |
-| `unity-mcp` | Registers Unity's own free MCP server with Claude Code via `unity mcp configure claude-code` — the kit wraps the vendor's tooling instead of shipping a competing bridge. |
-| `audit` | Scans local Claude Code transcripts for Unity failure signatures; ranked triage with confidence, `file:line` links, and per-session token/retry tallies. Local-only: uploads nothing. See "Daily sweep" below. |
-| `skill-lint` | Four dimensions across installed skills: description form (resting token cost, "Use when" firing conditions, negative triggers, overlap between two skills), near-duplicate paragraphs shared between two bodies, vocabulary discipline (one content term claimed by two skills, polysemous terms with no disambiguator), and environment contracts (machine numbers not marked "measured", CLI flags outside the adjudicated allowlist). |
-| `orphans` | Extra Unity.exe processes, orphaned dotnet compile servers, stale `Temp/UnityLockfile`, locked git worktrees. Lists PIDs; killing anything stays a human decision. |
-| `kanabo` | The v2 reload-boundary signal as a doctor row: reports the live epoch/state from `Temp/unity-agent-kit/epoch.json` when the editor is running the kit's UPM package. Detect-only, `pass`/`na` — an idle or absent editor is a state, not a defect. |
-
-Proof results persist to `.unity-agent-kit/verify.json` in the target repo:
-if the last real-merge proof FAILED, the doctor shows `warn` even though the
-config string looks right — green means proven, not just configured. (And if
-your `.gitattributes` doesn't route Unity YAML to a merge driver at all,
-`merge-driver` reports `na`, not `fail` — nothing routed means nothing to
-prove; add the routing and the check comes alive.)
-
-## v2 — Kanabō (minimal): the reload-boundary signal
-
-The domain reload is where agent workflows break: every socket and HTTP port
-dies, autotick disarms, and "wait 10 seconds" becomes the coping strategy.
-v2 ships the smallest thing that fixes it — a signal, not a tool surface:
-
-- The kit's UPM package writes `Temp/unity-agent-kit/epoch.json` from inside
-  the editor: `epoch` (increments on every domain reload), a 0.5 s heartbeat,
-  `state` (`ready` / `compiling` / `reloading`), and an asset `worldRevision`.
-  A file stays readable through the exact window where every connection is
-  dead — that is the whole trick.
-- `node packages/cli/bin/kit.js <proj> --epoch` is the machine door: one JSON
-  object, exit 0 always. Poll it; never sleep.
-- Writing `Temp/unity-agent-kit/refresh.request` asks the editor to import —
-  works unfocused and headless (unfocused editors never auto-import; that is
-  a measured hazard, not folklore).
-- Stale reads become *detectable*: capture `epoch` before an edit, require it
-  to increase after. (A bump proves a reload happened after your capture — if
-  something else can also trigger imports, verify content too.) The `kanabo`
-  doctor row reports the live signal.
-- Scope ceiling: no scene ops, no eval, no serializers — a status file out,
-  one refresh verb in. The vendor CLI/MCP remains the tool surface; this is
-  the correctness residual under it.
-
-Proof: `scripts/kanabo-proof.mjs` runs the acceptance loop — N iterations of
-edit → refresh → reload → verify on a disposable scratch project, requiring
-zero false successes and zero stale-epoch reads. (Result recorded in
-docs/BUILD-LEDGER.md.)
-
-## What the skills teach
-
-Five skills, installed by the Claude Code plugin:
-
-- **unity-verify** — three-tier verification, cheapest first: Roslyn eval with no reload, a
-  headless `dotnet build` typecheck, or a full editor recompile — pick the cheapest tier that
-  answers the question.
-- **unity-merge** — how to read and resolve Unity YAML conflicts left by the merge driver
-  (`UU` files stay valid YAML, never corrupted `.meta` guids).
-- **unity-topology** — one hot editor for anything touching the asset graph, many cold
-  worktrees for code-only work, and one owner per scene/prefab per wave, so parallel
-  agents don't corrupt shared state.
-- **unity-recipes** — four common agent operations (compile-wait, console read, asset
-  refresh, perf investigation) as bad-pattern/good-pattern pairs.
-- **unity-claude-md** — interviews you about your project, then generates a `CLAUDE.md`
-  tailored to it instead of a generic template.
-
-## What the kit never does
-
-- Never runs `git commit` for you.
-- Never uploads anything — there is no network call anywhere in the checks engine.
-- `detect()` never mutates your project — it only reads files and git config.
-- Every `apply()` is undoable via `--undo`.
-
-## Daily sweep (failure audit)
-
-The `audit` check reads your project's local Claude Code transcripts
-(`~/.claude/projects/<project>/*.jsonl` — **local-only, nothing is uploaded**)
-and flags Unity failure signatures: blind sleeps after edits, dead-port retry
-storms, C# writes with no refresh, accepted empty responses, oversized console
-dumps, huge diffs with no measurement, runaway sub-agent chains, and
-destructive-command near-misses. Each finding is ranked
-(fix-now / needs-attention / safe-to-ignore / superseded), scored for
-confidence, linked as `file:line` into the transcript, and mapped to the kit
-rule or skill that prevents it. Per-session tool-call/retry/token tallies ride
-along in `--json` (`detail.sessions`).
-
-Run it as a daily sweep over yesterday's sessions:
-
-    node packages/cli/bin/kit.js <your-project> --only audit
-
-`UAK_TRANSCRIPTS=<dir>` overrides the transcript location — the escape hatch if
-Claude Code's (undocumented) project-folder naming ever changes.
-
-Findings are advisory: the audit never returns `fail`, never blocks CI, and has
-no `--fix` path — it tells you which guard to install, you decide.
-
-## Evidence
-
-The regression suite ships in this repo (`packages/core/test/merge-driver.test.js` and
-`packages/core/assets/test-merge-driver.sh`) and runs as part of `npm test`. The design and
-research docs behind these claims live in the Kintarō repo's `docs/research/`.
-
-## Development
-
-### Skill trigger evals (maintainers)
-
-`node scripts/skill-evals.mjs` measures which skill fires for ~100 realistic
-queries (all five skills installed — coexistence, not isolation). Needs a
-logged-in `claude` CLI and spends real tokens (~300 headless calls per full
-run at `--runs 3`); never wire it into CI. `--skills`, `--model`, `--runs`,
-and `--variant <name>` (description variants from `evals-variants.json`)
-subset a run. While here, spot-check `/context` in a real session to confirm
-all five descriptions survive Claude Code's cumulative description budget.
-
-## License
-
-MIT — see `LICENSE` and `NOTICE`.
+Native proof fixtures belong in disposable Unity projects. The verification guides describe the tested scope. This project is [MIT licensed](LICENSE).

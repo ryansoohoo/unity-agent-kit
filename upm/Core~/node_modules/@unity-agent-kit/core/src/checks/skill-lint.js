@@ -83,6 +83,10 @@ function vocabFlags(skills) {
 const CONTRACT_ALLOW = new Set([
   '--wait-ready', '--since-epoch', '--timeout-ms', '--poll-ms', '--epoch',
   '--only', '--fix', '--undo', '--json',            // kit-owned (version-locked to this repo)
+  '--menu', '--method', '--arg', '--errors', '--last', // kit-owned: invoke/console verbs
+  '--after', '--before', '--config', '--context', '--file', '--filter', '--id',
+  '--label', '--lease', '--out', '--owner', '--probe', '--seconds', '--session',
+  '--tick', '--ticket', '--wait',                    // kit-owned: operations, leases, sessions, profiler
   '--fallback',                                     // vendor: UnityYAMLMerge, proven by the merge-driver suite
   '--ours', '--theirs',                             // vendor: git checkout conflict-side selectors (verified against git 2.55 `checkout -h`)
 ]);

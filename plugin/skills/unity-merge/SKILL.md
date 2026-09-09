@@ -1,27 +1,36 @@
 ---
 name: unity-merge
-description: Use when git shows conflicts (UU) or merges involving .unity/.prefab/.meta/.mat/.asset files. Do NOT use for compile verification (unity-verify) or normal code merges.
+description: Unity YAML conflicts. Use when git shows conflicts (UU) or merges involving .unity/.prefab/.meta/.mat/.asset files. Do NOT use for compile verification (unity-verify) or normal code merges.
 ---
 
 # Unity YAML merges: what the driver did and what you do now
 
 This project's merge driver (tools/unity-yaml-merge.sh, installed by
-unity-agent-kit) auto-merges DISJOINT Unity YAML edits and stops CONFLICTING
-ones as `UU` with the file left as VALID YAML — conflict markers never reach a
-`guid:` line (Unity would treat that as corrupt and may regenerate the GUID,
-silently repointing every reference).
+unity-agent-kit) auto-merges disjoint Unity YAML edits and stops conflicting
+ones as `UU` with the file left as valid YAML. Conflict markers never reach a
+`guid:` line: Unity would treat that as corrupt and may regenerate the GUID,
+silently repointing every reference.
 
 ## When you see UU on a Unity file
-1. `git checkout --ours <file>` or `--theirs <file>` if one side should win, OR
-   merge manually: the conflict is semantic (same object/field changed twice).
-2. NEVER commit a Unity YAML file containing `<<<<<<<` markers.
-3. A `.meta` guid conflict means two assets claim one identity — pick the side
-   whose references you keep; never invent a new guid.
 
-## Prevention rules (you, the agent, enforce these)
-- Additive work merges; shared-scene edits do not (ownership rules: unity-topology).
-- Never switch branches in a checkout while a Unity editor has it open — asset
-  refresh restarts mid-import and state tears.
-- Scene/prefab files sitting modified-uncommitted are unreconstructable if
-  lost: surface them to the human before starting risky work (the kit's doctor
+1. Decide the winner. `git checkout --ours <file>` or `--theirs <file>` when
+   one side should win; otherwise merge by hand, because the conflict is
+   semantic (same object or field changed twice).
+2. A `.meta` guid conflict means two assets claim one identity. Keep the side
+   whose references you keep; the guid is never invented fresh.
+3. Confirm the file parses (open it in the editor or run the kit's doctor)
+   and commit.
+
+**Done when:** no Unity YAML file in the commit contains `<<<<<<<`, every
+`.meta` guid matches the references that survive, and the editor loads the
+merged scene or prefab.
+
+## Prevention (you, the agent, enforce these)
+
+- Additive work merges; shared-scene edits do not. Ownership rules live in
+  unity-topology.
+- Switch branches only when no Unity editor has the checkout open; otherwise
+  asset refresh restarts mid-import and state tears.
+- Modified, uncommitted scene or prefab files are unreconstructable if lost.
+  Surface them to the human before starting risky work (the kit's doctor
   warns on this too).

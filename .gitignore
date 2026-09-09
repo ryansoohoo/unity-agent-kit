@@ -1,4 +1,5 @@
 /node_modules/
+/.unity-agent-kit/
 *.log
 
 # Claude Code worktrees. Nested multi-gigabyte Unity checkouts must never be

@@ -8,12 +8,15 @@ import { KIT_VERSION } from '../src/version.js';
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 
 test('every manifest agrees with KIT_VERSION', () => {
-  assert.equal(KIT_VERSION, '0.4.0');
-  for (const p of ['packages/core/package.json', 'packages/cli/package.json', 'plugin/.claude-plugin/plugin.json', 'upm/package.json']) {
+  assert.equal(KIT_VERSION, '0.6.0');
+  for (const p of ['packages/core/package.json', 'packages/cli/package.json', 'packages/mcp/package.json', 'plugin/.claude-plugin/plugin.json', 'upm/package.json']) {
     assert.equal(JSON.parse(readFileSync(join(REPO, p), 'utf8')).version, KIT_VERSION, p);
   }
   assert.equal(JSON.parse(readFileSync(join(REPO, 'packages/cli/package.json'), 'utf8')).dependencies['@unity-agent-kit/core'], KIT_VERSION);
+  assert.equal(JSON.parse(readFileSync(join(REPO, 'packages/mcp/package.json'), 'utf8')).dependencies['@unity-agent-kit/core'], KIT_VERSION);
+  assert.equal(JSON.parse(readFileSync(join(REPO, '.claude-plugin/marketplace.json'), 'utf8')).plugins[0].version, KIT_VERSION);
   const lock = JSON.parse(readFileSync(join(REPO, 'package-lock.json'), 'utf8'));
   assert.equal(lock.packages['packages/cli'].version, KIT_VERSION, 'package-lock cli version');
   assert.equal(lock.packages['packages/core'].version, KIT_VERSION, 'package-lock core version');
+  assert.equal(lock.packages['packages/mcp'].version, KIT_VERSION, 'package-lock MCP version');
 });

@@ -1,7 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createContext } from '../src/context.js';
@@ -10,9 +9,10 @@ import { register } from '../src/registry.js';
 import { applyOne } from '../src/engine.js';
 import '../src/checks/index.js';
 import { getCheck } from '../src/registry.js';
+import { tmp } from './tmp.js';
 
 test('recordVerify/loadVerify round-trip; corrupt file degrades to empty', () => {
-  const ctx = createContext(mkdtempSync(join(tmpdir(), 'uak-v-')));
+  const ctx = createContext(tmp('uak-v-'));
   assert.deepEqual(loadVerify(ctx), {});
   recordVerify(ctx, 'merge-driver', { ok: false, proof: 'suite failed' });
   assert.equal(loadVerify(ctx)['merge-driver'].ok, false);
@@ -28,13 +28,13 @@ test('applyOne records the verify outcome', async () => {
     apply: async () => ({ changed: [], undo: [] }),
     verify: async () => ({ ok: false, proof: 'nope' }),
   });
-  const ctx = createContext(mkdtempSync(join(tmpdir(), 'uak-v-')));
+  const ctx = createContext(tmp('uak-v-'));
   await applyOne(ctx, 't-verify-log');
   assert.equal(loadVerify(ctx)['t-verify-log'].ok, false);
 });
 
 test('merge-driver detect down-ranks to warn when the last recorded proof failed', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'uak-v-'));
+  const dir = tmp('uak-v-');
   execFileSync('git', ['init', '-q', dir]);
   writeFileSync(join(dir, '.gitattributes'), '*.unity merge=unityyamlmerge\n');
   execFileSync('git', ['-C', dir, 'config', 'merge.unityyamlmerge.driver', "sh 'C:/x/unity-yaml-merge.sh' %O %A %B %P"]);
